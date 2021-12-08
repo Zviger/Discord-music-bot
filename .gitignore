@@ -127,3 +127,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# IDE
+.idea
+
+# bot files
+cached_music
+images
+default_playlist
+config.ini
+kek.py
