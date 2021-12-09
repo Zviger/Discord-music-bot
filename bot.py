@@ -105,7 +105,7 @@ class MusicBot(Bot):
 
     def setup_commands(self) -> Callable:
         async def prepare_and_play(args: Tuple[str], ctx: Context, play_method: callable):
-            source, start_time, search_source = parse_play_args(args)
+            source, start_time = parse_play_args(args)
             voice_client = self.get_guild_voice_client(ctx)
             if not voice_client:
                 try:
@@ -120,7 +120,7 @@ class MusicBot(Bot):
                 if ctx.author.voice.channel != self.get_guild_voice_client(ctx).channel:
                     await send_message(ctx, "You should be in a voice channel with bot!", logging.WARNING)
                     return
-                play_method(self.music_handler, source, ctx, start_time, search_source)
+                play_method(self.music_handler, source, ctx, start_time)
             else:
                 await send_message(ctx, "Can't play, bot is not in voice channel!", logging.WARNING)
 
@@ -167,20 +167,20 @@ class MusicBot(Bot):
 
         @self.command(aliases=("p", "навали", "н"))
         async def play(ctx: Context, *args: str) -> None:
-            """Add track to queue by youtube link or video name and play music, if player stopped.
+            """Add track to queue by youtube link, yandex music link or by track name and play music, if player stopped.
             At the end of command u can add start time for playing in hh:mm:ss format.
             """
             await prepare_and_play(args, ctx, MusicHandler.play)
 
         @self.command(aliases=("д", "добавь", "a"))
         async def add(ctx: Context, *args: str) -> None:
-            """Add track to queue by youtube link or video name.
+            """Add track to queue by youtube link, yandex music link or by track name.
             At the end of command u can add start time for playing in hh:mm:ss format.
             """
-            source, start_time, search_source = parse_play_args(args)
+            source, start_time = parse_play_args(args)
 
             if self.music_handler:
-                self.music_handler.play(source, ctx, start_time, search_source)
+                self.music_handler.play(source, ctx, start_time)
             else:
                 await send_message(ctx, "Can't add to playlist: bot is not in voice channel!", logging.WARNING)
 

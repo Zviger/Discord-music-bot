@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 from enum import Enum
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Generator
 
 from dateutil import parser
 from discord import Embed, Colour
@@ -14,7 +14,8 @@ logger = logging.getLogger(settings.app_name)
 
 class SearchDomains(Enum):
     youtube = "www.youtube.com"
-    yandex_music = "music.yandex.by"
+    youtube_short = "youtu.be"
+    yandex_music = "music.yandex"
 
 
 async def send_message(ctx: Context, message: str, level: int = logging.INFO):
@@ -31,9 +32,8 @@ async def send_message(ctx: Context, message: str, level: int = logging.INFO):
     await ctx.send(embed=embed)
 
 
-def parse_play_args(args: tuple[str]) -> Tuple[str, Optional[datetime], SearchDomains]:
+def parse_play_args(args: tuple[str]) -> Tuple[str, Optional[datetime]]:
     start_time = None
-    search_source = SearchDomains.youtube
     strings = list(args)
     if len(args) > 1:
         try:
@@ -41,19 +41,12 @@ def parse_play_args(args: tuple[str]) -> Tuple[str, Optional[datetime], SearchDo
             strings.pop()
         except ValueError:
             pass
-        search_source_str = strings[-1]
-        if search_source_str in ("yt", "ym"):
-            if search_source_str == "yt":
-                search_source = SearchDomains.youtube
-            elif search_source_str == "ym":
-                search_source = SearchDomains.yandex_music
-            strings.pop()
 
     source = " ".join(strings)
-    return source, start_time, search_source
+    return source, start_time
 
 
-def chunks(lst, n):
+def chunks(lst, n) -> Generator:
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
         yield lst[i:i + n]

@@ -10,7 +10,7 @@ from pathlib import Path
 from threading import Thread
 from time import gmtime, strftime, struct_time
 from typing import Tuple, Optional, List
-from urllib.parse import urlparse
+from urllib import parse
 
 import yt_dlp as youtube_dl
 from dateutil import parser
@@ -60,6 +60,19 @@ class YtLogger:
         logger.error(msg)
 
 
+YDL_OPTIONS = {
+    "format": "bestaudio",
+    "outtmpl": f"{settings.cached_music_dir}/%(id)s",
+    "ignoreerrors": True,
+    "skip-unavailable-fragments": True,
+    "youtube-skip-dash-manifest": True,
+    "cache-dir": "~/.cache/youtube-dl",
+    "logger": YtLogger,
+    "default_search": "ytsearch",
+
+}
+
+
 class MusicHandler:
     def __init__(self, voice_client, loop: AbstractEventLoop):
         self._voice_client: VoiceClient = voice_client
@@ -74,16 +87,16 @@ class MusicHandler:
         self._show_queue_length = 5
         self._lock = threading.Lock()
         self.ym_client = yandex_music.Client(token=config.tokens["yandex_music"], report_new_fields=False)
+        self.ydl = youtube_dl.YoutubeDL(YDL_OPTIONS)
 
     def add_to_playlist(
             self,
             source: str,
             ctx: Context,
             start_time: Optional[datetime.datetime],
-            search_source: SearchDomains = SearchDomains.youtube,
             write_message: bool = True
     ):
-        track = self._download_track(source, ctx, start_time, search_source=search_source, write_message=write_message)
+        track = self._download(source, ctx, start_time, write_message=write_message)
         if track is not None:
             self._lock.acquire()
             self._add_track_to_queue(track)
@@ -93,19 +106,17 @@ class MusicHandler:
             self,
             sources: List[str],
             ctx: Context,
-            search_source: SearchDomains = SearchDomains.youtube
     ):
         for source in sources:
-            self.add_to_playlist(source, ctx, None, search_source, False)
+            self.add_to_playlist(source, ctx, None, False)
 
     def batch_thread_add_to_playlist(
             self,
             sources: List[str],
-            ctx: Context,
-            search_source: SearchDomains = SearchDomains.youtube
+            ctx: Context
     ):
-        for chunk in chunks(sources, len(sources)//THREAD_COUNT + 1):
-            thread = Thread(target=self.batch_add_to_playlist, args=(chunk, ctx, search_source))
+        for chunk in chunks(sources, len(sources) // THREAD_COUNT + 1):
+            thread = Thread(target=self.batch_add_to_playlist, args=(chunk, ctx))
             thread.start()
 
     def play(
@@ -113,9 +124,8 @@ class MusicHandler:
             source: str,
             ctx: Context,
             start_time: Optional[datetime.datetime],
-            search_source: SearchDomains = SearchDomains.youtube,
             download_message: bool = True):
-        track = self._download_track(source, ctx, start_time, search_source, download_message)
+        track = self._download(source, ctx, start_time, download_message)
         if track is not None:
             self._lock.acquire()
             self._add_track_to_queue(track)
@@ -199,13 +209,13 @@ class MusicHandler:
                 current_time = strftime("%H:%M:%S", current_time)
                 full_time = strftime("%H:%M:%S", full_time)
                 embed.add_field(
-                    name=f"{i+1}) Current track [{current_time} - {full_time}]",
+                    name=f"{i + 1}) Current track [{current_time} - {full_time}]",
                     value=f"```css\n{track.title}```",
                     inline=False
                 )
             else:
                 embed.add_field(
-                    name=f"{i+1}) {datetime.timedelta(seconds=track.length)}",
+                    name=f"{i + 1}) {datetime.timedelta(seconds=track.length)}",
                     value=f"```css\n{track.title}```",
                     inline=False
                 )
@@ -296,9 +306,8 @@ class MusicHandler:
             source: str,
             ctx: Context,
             start_time: datetime.datetime,
-            search_source: SearchDomains = SearchDomains.youtube
     ):
-        track = self._download_track(source, ctx, start_time, search_source=search_source)
+        track = self._download(source, ctx, start_time)
 
         if self._status == PlayerStatus.PLAYING:
             current_time, _ = self._current_full_time()
@@ -355,13 +364,13 @@ class MusicHandler:
             self._is_loop_queue = True
             self._send_message(ctx, "Queue is looped")
 
-    def default(self, _, ctx: Context, __, search_source: SearchDomains = SearchDomains.youtube):
+    def default(self, _, ctx: Context, __):
         with open("default_playlist", "r+") as file:
             track_urls = file.readlines()
             random.shuffle(track_urls)
 
             if len(track_urls) == 1:
-                self.play(track_urls[0].strip(), ctx, None, search_source, False)
+                self.play(track_urls[0].strip(), ctx, None, False)
 
             if len(track_urls) == 2:
                 self.batch_thread_add_to_playlist(track_urls[1:], ctx)
@@ -447,40 +456,34 @@ class MusicHandler:
     def _add_track_to_queue(self, track: Track) -> None:
         self._queue.append(track)
 
-    def _download_track(
+    def _download(
             self,
             source: str,
             ctx: Context,
             start_time: Optional[datetime.datetime] = None,
-            search_source: SearchDomains = SearchDomains.youtube,
             write_message: bool = True,
     ) -> Optional[Track]:
-        ydl_opts = {
-            "format": "bestaudio",
-            "outtmpl": f"{settings.cached_music_dir}/%(id)s",
-            "ignoreerrors": True,
-            "skip-unavailable-fragments": True,
-            "youtube-skip-dash-manifest": True,
-            "cache-dir": "~/.cache/youtube-dl",
-            "logger": YtLogger
-        }
+        parsed_url = parse.urlparse(source)
+        netloc = parsed_url.netloc
 
-        if search_source == SearchDomains.youtube:
-            ydl_opts["default_search"] = "ytsearch"
-            ydl = youtube_dl.YoutubeDL(ydl_opts)
-            track_info = ydl.extract_info(source, download=False)
+        if (
+                netloc.startswith(SearchDomains.youtube.value)
+                or netloc.startswith(SearchDomains.youtube_short.value)
+                or not netloc
+        ):
+            track_info = self.ydl.extract_info(source, download=False)
 
-            if not urlparse(source).hostname:
+            if not netloc:
                 track_info = track_info["entries"][0]
-                ydl.download(track_info["original_url"])
+                self.ydl.download(track_info["original_url"])
             elif entries := track_info.get("entries"):
                 write_message = False
                 start_time = None
                 track_info = entries[0]
-                ydl.download(track_info["original_url"])
+                self.ydl.download(track_info["original_url"])
                 self.batch_thread_add_to_playlist([entry["original_url"] for entry in entries[1:] if entry], ctx)
             else:
-                ydl.download(track_info["original_url"])
+                self.ydl.download(track_info["original_url"])
 
             track = Track(
                 id=track_info["id"],
@@ -489,34 +492,56 @@ class MusicHandler:
                 length=track_info["duration"],
                 creation_time=time.time()
             )
-        elif search_source == SearchDomains.yandex_music:
-            if (ids := source.split(":")) and len(ids) == 2 and ids[0].isnumeric() and ids[1].isnumeric():
-                track = self.ym_client.tracks(source)[0]
-                self._download_ym_track(track)
+        elif netloc.startswith(SearchDomains.yandex_music.value):
+            path_args = parsed_url.path.strip("/").split("/")
 
-            elif source.isnumeric():
-                tracks = list(itertools.chain(*self.ym_client.albums_with_tracks(int(source)).volumes))
+            if len(path_args) == 2 and path_args[0] == "album" and path_args[1].isnumeric():
+                tracks = list(itertools.chain(*self.ym_client.albums_with_tracks(int(path_args[1])).volumes))
                 track = tracks[0]
                 self._download_ym_track(track)
-                self.batch_thread_add_to_playlist([track_.track_id for track_ in tracks[1:]], ctx, search_source)
-            elif source.startswith("-u") and (len((args := source.split(" "))) == 3 and args[2].isnumeric()):
-                user_login, playlist_id = args[1], int(args[2])
+                self.batch_thread_add_to_playlist(
+                    [
+                        f"https://music.yandex.by/album/{(ids := t.track_id.split(':'))[1]}/track/{ids[0]}"
+                        for t in tracks[1:]
+                    ],
+                    ctx
+                )
+            elif (
+                    len(path_args) == 4
+                    and path_args[0] == "users"
+                    and path_args[2] == "playlists"
+                    and path_args[3].isnumeric()
+            ):
+                user_login, playlist_id = path_args[1], int(path_args[3])
                 tracks = self.ym_client.users_playlists(playlist_id, user_login).tracks
                 track = tracks[0].track
                 self._download_ym_track(track)
-                self.batch_thread_add_to_playlist([track_.track.track_id for track_ in tracks[1:]], ctx, search_source)
-            else:
-                search: yandex_music.Search = self.ym_client.search(source, type_="track")
-                search_result: yandex_music.SearchResult = search.tracks
-                tracks = search_result.results
-                track = tracks[0]
+                self.batch_thread_add_to_playlist(
+                    [
+                        f"https://music.yandex.by/album/{(ids := t.track.track_id.split(':'))[1]}/track/{ids[0]}"
+                        for t in tracks[1:]
+                    ],
+                    ctx
+                )
+            elif (
+                    len(path_args) == 4
+                    and path_args[0] == "album"
+                    and path_args[1].isnumeric()
+                    and path_args[2] == "track"
+                    and path_args[3].isnumeric()
+            ):
+                track = self.ym_client.tracks(f"{path_args[3]}:{path_args[1]}")[0]
                 self._download_ym_track(track)
+            else:
+                if write_message:
+                    self._send_message(ctx, f"Cant download yandex music", logging.ERROR)
+                return None
 
             track = Track(
                 id=track.track_id,
                 title=track.title,
-                link=SearchDomains.yandex_music.value,
-                length=track.duration_ms//1000,
+                link=source,
+                length=track.duration_ms // 1000,
                 creation_time=time.time()
             )
         else:
