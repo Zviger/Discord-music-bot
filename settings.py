@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     config_file = "config.ini"
     arrow_up_small = b"\xf0\x9f\x94\xbc".decode("utf-8")
     arrow_down_small = b"\xf0\x9f\x94\xbd".decode("utf-8")
+    double_arrow_up_small = b"\xe2\x8f\xab".decode("utf-8")
+    double_arrow_down_small = b"\xe2\x8f\xac".decode("utf-8")
+    restart = False
 
 
 settings = Settings()

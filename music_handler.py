@@ -178,6 +178,8 @@ class MusicHandler:
         if self._show_queue_first_index != 0 or len(self._queue) > self._show_queue_length:
             await message.add_reaction(settings.arrow_up_small)
             await message.add_reaction(settings.arrow_down_small)
+            await message.add_reaction(settings.double_arrow_up_small)
+            await message.add_reaction(settings.double_arrow_down_small)
 
     def _get_show_queue_embed(self) -> Embed:
         current_id = self._get_current_track_position()
@@ -221,12 +223,18 @@ class MusicHandler:
         if emoji == settings.arrow_down_small:
             if old_index + queue_length < len(self._queue):
                 self._show_queue_first_index += queue_length
-        else:
+                if self._show_queue_first_index > len(self._queue) - self._show_queue_length:
+                    self._show_queue_first_index = len(self._queue) - self._show_queue_length
+        elif emoji == settings.arrow_up_small:
             if self._show_queue_first_index - queue_length >= 0:
                 self._show_queue_first_index -= queue_length
             else:
                 if old_index > 0:
                     self._show_queue_first_index = 0
+        elif emoji == settings.double_arrow_up_small:
+            self._show_queue_first_index = 0
+        else:
+            self._show_queue_first_index = len(self._queue) - self._show_queue_length
 
         if old_index != self._show_queue_first_index:
             embed = self._get_show_queue_embed()

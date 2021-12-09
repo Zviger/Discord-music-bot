@@ -55,7 +55,12 @@ class MusicBot(Bot):
             user.id != self.user.id
             and self.music_handler
             and self.music_handler.is_show_query_message(reaction.message)
-            and reaction.emoji in (settings.arrow_up_small, settings.arrow_down_small)
+            and reaction.emoji in (
+                    settings.arrow_up_small,
+                    settings.arrow_down_small,
+                    settings.double_arrow_up_small,
+                    settings.double_arrow_down_small,
+            )
         ):
             await self.music_handler.move_show_query(reaction.emoji)
             message: Message = reaction.message
