@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from config import config
@@ -9,5 +10,8 @@ logger = logging.getLogger(settings.app_name)
 
 if __name__ == "__main__":
     logger.info("Start app")
-    bot = MusicBot(settings.command_prefix)
-    bot.run(config.tokens.get("discord"))
+    settings.restart = True
+    while settings.restart:
+        settings.restart = False
+        bot = MusicBot(settings.command_prefix, loop=asyncio.new_event_loop())
+        bot.run(config.tokens.get("discord"))

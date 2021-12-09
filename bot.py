@@ -75,7 +75,7 @@ class MusicBot(Bot):
         else:
             await Bot.on_message(self, message)
 
-    async def on_voice_state_update(self, member: Union[Member, User], before: VoiceState, after: VoiceState) -> None:
+    async def on_voice_state_update(self, member: Union[Member, User], before: VoiceState, _: VoiceState) -> None:
         if before.channel is None:
             if user_setting := config.users_settings.get(member.id):
                 if channel_id := config.channels.get("general"):
@@ -89,7 +89,7 @@ class MusicBot(Bot):
             else:
                 logger.info(f"Member {member} is here.")
 
-    async def on_member_ban(self, guild: Guild, user: User) -> None:
+    async def on_member_ban(self, _: Guild, user: User) -> None:
         if channel_id := config.channels.get("general"):
             channel: TextChannel = self.get_channel(channel_id)
             await channel.send(
@@ -329,5 +329,17 @@ class MusicBot(Bot):
         async def default(ctx: Context):
             """Loads tracks from default list."""
             await self.prepare_and_play(tuple(), ctx, MusicHandler.default)
+
+        @self.command(aliases=("нога",))
+        async def restart(ctx: Context) -> None:
+            """Restart the bot."""
+            settings.restart = True
+
+            try:
+                await leave(ctx)
+            except Exception as e:
+                logger.error(str(e))
+
+            await self.close()
 
         return prepare_and_play
