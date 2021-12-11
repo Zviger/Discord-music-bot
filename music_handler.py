@@ -188,9 +188,10 @@ class MusicHandler:
         message: Message
         message = self._show_queue_message = await ctx.send(embed=embed)
 
-        if self._show_queue_first_index != 0 or len(self._queue) > self._show_queue_length:
+        if self._show_queue_first_index or len(self._queue) > self._show_queue_length:
             await message.add_reaction(settings.arrow_up_small)
             await message.add_reaction(settings.arrow_down_small)
+            await message.add_reaction(settings.record_button)
             await message.add_reaction(settings.double_arrow_up_small)
             await message.add_reaction(settings.double_arrow_down_small)
 
@@ -247,8 +248,10 @@ class MusicHandler:
                     self._show_queue_first_index = 0
         elif emoji == settings.double_arrow_up_small:
             self._show_queue_first_index = 0
-        else:
+        elif emoji == settings.double_arrow_down_small:
             self._show_queue_first_index = len(self._queue) - self._show_queue_length
+        else:
+            self._show_queue_first_index = self._get_current_track_position()
 
         if old_index != self._show_queue_first_index:
             embed = self._get_show_queue_embed()
@@ -301,7 +304,7 @@ class MusicHandler:
             current_time, full_time = self._current_full_time()
             current_time = strftime("%H:%M:%S", current_time)
             full_time = strftime("%H:%M:%S", full_time)
-            self._send_message(ctx, f"{track.title} [{current_time} - {full_time}]")
+            self._send_message(ctx, f"{track.title} [{current_time} - {full_time}]\n{track.link}")
         else:
             self._send_message(ctx, f"Nothing is playing")
 

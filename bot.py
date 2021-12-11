@@ -58,6 +58,7 @@ class MusicBot(Bot):
             and reaction.emoji in (
                     settings.arrow_up_small,
                     settings.arrow_down_small,
+                    settings.record_button,
                     settings.double_arrow_up_small,
                     settings.double_arrow_down_small,
             )
