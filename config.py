@@ -26,12 +26,12 @@ class Config:
         if self.config.has_section("user_settings"):
             user_settings_section = self.config["user_settings"]
             for uid, setting in user_settings_section.items():
-                self.users_settings[uid] = UserSettings(*setting.strip().split("::"))
+                self.users_settings[int(uid)] = UserSettings(*setting.strip().split("::"))
 
         if self.config.has_section("channels"):
             channels_section = self.config["channels"]
             for channel_name, channel_id in channels_section.items():
-                self.channels[channel_name] = channel_id
+                self.channels[channel_name] = int(channel_id)
 
         if self.config.has_section("tokens"):
             tokens_section = self.config["tokens"]

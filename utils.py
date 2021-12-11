@@ -16,6 +16,7 @@ class SearchDomains(Enum):
     youtube = "www.youtube.com"
     youtube_short = "youtu.be"
     yandex_music = "music.yandex"
+    spotify = "open.spotify.com"
 
 
 async def send_message(ctx: Context, message: str, level: int = logging.INFO):

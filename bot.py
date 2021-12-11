@@ -184,7 +184,7 @@ class MusicBot(Bot):
             else:
                 await send_message(ctx, "Can't add to playlist: bot is not in voice channel!", logging.WARNING)
 
-        @self.command(aliases=("стоп",))
+        @self.command(aliases=("стоп", "clear"))
         async def stop(ctx: Context) -> None:
             """Stop music and empty playlist."""
             if self.is_voice_client_here(ctx):
@@ -310,14 +310,6 @@ class MusicBot(Bot):
                     await send_message(ctx, "Can't set volume: bot is not in voice channel with you!", logging.WARNING)
             else:
                 await send_message(ctx, f"Volume value - {config.volume_value}")
-
-        @self.command(aliases=("вилка",))
-        async def clear(ctx: Context) -> None:
-            """Empty queue value."""
-            if self.is_voice_client_here(ctx):
-                self.music_handler.clear(ctx)
-            else:
-                await send_message(ctx, "Can't clear queue: bot is not in voice channel with you!", logging.WARNING)
 
         @self.command(aliases=("залупи",))
         async def loop(ctx: Context) -> None:

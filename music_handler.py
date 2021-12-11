@@ -32,6 +32,7 @@ import yandex_music
 from config import config
 from models import Track
 from settings import settings
+from spotify import Spotify
 from utils import chunks, SearchDomains
 
 logger = logging.getLogger(settings.app_name)
@@ -84,10 +85,11 @@ class MusicHandler:
         self._is_loop_queue: bool = False
         self._show_queue_message: Optional[Message] = None
         self._show_queue_first_index = 0
-        self._show_queue_length = 5
+        self._show_queue_length = 8
         self._lock = threading.Lock()
-        self.ym_client = yandex_music.Client(token=config.tokens["yandex_music"], report_new_fields=False)
-        self.ydl = youtube_dl.YoutubeDL(YDL_OPTIONS)
+        self._ym_client = yandex_music.Client(token=config.tokens["yandex_music"], report_new_fields=False)
+        self._ydl = youtube_dl.YoutubeDL(YDL_OPTIONS)
+        self._sf_client = Spotify(config.tokens["spotify_client_id"], config.tokens["spotify_client_secret"])
 
     def add_to_playlist(
             self,
@@ -142,6 +144,7 @@ class MusicHandler:
             self._queue.clear()
             self._current_queue_track = None
             self._current_im_track = None
+            self._show_queue_first_index = 0
             self._send_message(ctx, "Stopped!")
         elif self._status == PlayerStatus.NOT_PLAYING:
             self._send_message(ctx, "Bot doesn't play anything!", logging.WARNING)
@@ -203,22 +206,23 @@ class MusicHandler:
             embed.add_field(name="Immediately track", value=f"```css\n{current_track_strings or 'empty'}```")
 
         current_index = self._show_queue_first_index
-        for i, track in tuple(enumerate(self._queue))[current_index:current_index + self._show_queue_length]:
-            if i == current_id and not self._current_im_track:
-                current_time, full_time = self._current_full_time()
-                current_time = strftime("%H:%M:%S", current_time)
-                full_time = strftime("%H:%M:%S", full_time)
-                embed.add_field(
-                    name=f"{i + 1}) Current track [{current_time} - {full_time}]",
-                    value=f"```css\n{track.title}```",
-                    inline=False
-                )
-            else:
-                embed.add_field(
-                    name=f"{i + 1}) {datetime.timedelta(seconds=track.length)}",
-                    value=f"```css\n{track.title}```",
-                    inline=False
-                )
+        if current_index is not None:
+            for i, track in tuple(enumerate(self._queue))[current_index:current_index + self._show_queue_length]:
+                if i == current_id and not self._current_im_track:
+                    current_time, full_time = self._current_full_time()
+                    current_time = strftime("%H:%M:%S", current_time)
+                    full_time = strftime("%H:%M:%S", full_time)
+                    embed.add_field(
+                        name=f"{i + 1}) Current track [{current_time} - {full_time}]",
+                        value=f"```css\n{track.title}```",
+                        inline=False
+                    )
+                else:
+                    embed.add_field(
+                        name=f"{i + 1}) {datetime.timedelta(seconds=track.length)}",
+                        value=f"```css\n{track.title}```",
+                        inline=False
+                    )
 
         embed.colour = Colour.blue()
 
@@ -314,7 +318,8 @@ class MusicHandler:
             current_time = datetime.datetime.fromtimestamp(time.mktime(current_time))
             self._status = PlayerStatus.NOT_PLAYING
             self._voice_client.stop()
-            self._current_queue_track.start_time = current_time
+            if self._current_queue_track is not None:
+                self._current_queue_track.start_time = current_time
             time.sleep(SLEEP_TIME)
             self._current_im_track = track
             self._try_play(ctx, track, is_im_track=True)
@@ -351,11 +356,6 @@ class MusicHandler:
 
         config.dump_config()
 
-    def clear(self, ctx: Context):
-        self._queue.clear()
-        self._show_queue_first_index = 0
-        self._send_message(ctx, "Queue is cleared")
-
     def loop(self, ctx: Context):
         if self._is_loop_queue:
             self._is_loop_queue = False
@@ -375,7 +375,7 @@ class MusicHandler:
             if len(track_urls) == 2:
                 self.batch_thread_add_to_playlist(track_urls[1:], ctx)
 
-    def _send_message(self, ctx: Context, message: str, level: int = logging.INFO):
+    def _send_message(self, ctx: Context, message: str, level: int = logging.INFO, not_only_log=True):
         embed = Embed(title=message)
         if level == logging.INFO:
             logger.info(message)
@@ -386,7 +386,8 @@ class MusicHandler:
         elif level == logging.ERROR:
             logger.error(message)
             embed.colour = Colour.red()
-        self._loop.create_task(ctx.send(embed=embed))
+        if not_only_log:
+            self._loop.create_task(ctx.send(embed=embed))
 
     def _try_play(self, ctx: Context, track: Track, is_im_track: bool = False, msg=True):
         if self._status not in (PlayerStatus.PLAYING, PlayerStatus.PAUSED):
@@ -471,19 +472,26 @@ class MusicHandler:
                 or netloc.startswith(SearchDomains.youtube_short.value)
                 or not netloc
         ):
-            track_info = self.ydl.extract_info(source, download=False)
+            track_info = self._ydl.extract_info(source, download=False)
 
             if not netloc:
-                track_info = track_info["entries"][0]
-                self.ydl.download(track_info["original_url"])
+                entries = track_info["entries"]
+                if entries:
+                    track_info = entries[0]
+                    self._ydl.download(track_info["original_url"])
+                else:
+                    if write_message:
+                        self._send_message(ctx, f"Cant download youtube music {source}", logging.ERROR)
+                    return None
+
             elif entries := track_info.get("entries"):
                 write_message = False
                 start_time = None
                 track_info = entries[0]
-                self.ydl.download(track_info["original_url"])
+                self._ydl.download(track_info["original_url"])
                 self.batch_thread_add_to_playlist([entry["original_url"] for entry in entries[1:] if entry], ctx)
             else:
-                self.ydl.download(track_info["original_url"])
+                self._ydl.download(track_info["original_url"])
 
             track = Track(
                 id=track_info["id"],
@@ -496,7 +504,7 @@ class MusicHandler:
             path_args = parsed_url.path.strip("/").split("/")
 
             if len(path_args) == 2 and path_args[0] == "album" and path_args[1].isnumeric():
-                tracks = list(itertools.chain(*self.ym_client.albums_with_tracks(int(path_args[1])).volumes))
+                tracks = list(itertools.chain(*self._ym_client.albums_with_tracks(int(path_args[1])).volumes))
                 track = tracks[0]
                 self._download_ym_track(track)
                 self.batch_thread_add_to_playlist(
@@ -513,7 +521,7 @@ class MusicHandler:
                     and path_args[3].isnumeric()
             ):
                 user_login, playlist_id = path_args[1], int(path_args[3])
-                tracks = self.ym_client.users_playlists(playlist_id, user_login).tracks
+                tracks = self._ym_client.users_playlists(playlist_id, user_login).tracks
                 track = tracks[0].track
                 self._download_ym_track(track)
                 self.batch_thread_add_to_playlist(
@@ -530,7 +538,7 @@ class MusicHandler:
                     and path_args[2] == "track"
                     and path_args[3].isnumeric()
             ):
-                track = self.ym_client.tracks(f"{path_args[3]}:{path_args[1]}")[0]
+                track = self._ym_client.tracks(f"{path_args[3]}:{path_args[1]}")[0]
                 self._download_ym_track(track)
             else:
                 if write_message:
@@ -544,6 +552,41 @@ class MusicHandler:
                 length=track.duration_ms // 1000,
                 creation_time=time.time()
             )
+        elif netloc.startswith(SearchDomains.spotify.value):
+            path_args = parsed_url.path.split("/")
+
+            if "track" in path_args:
+                response = self._sf_client.get_track(path_args[-1])
+                track_name = f"{response['artists'][0]['name']} {response['name']}"
+
+                return self._download(track_name, ctx, start_time, write_message)
+            elif "album" in path_args:
+                response = self._sf_client.get_album(path_args[-1])
+                track_names = [f"{i['name']} {i['artists'][0]['name']}" for i in response["tracks"]["items"]]
+                result = self._download(track_names[0], ctx, start_time, write_message)
+                self.batch_thread_add_to_playlist(track_names[1:], ctx)
+
+                return result
+            elif "playlist" in path_args:
+                tracks = []
+                response = self._sf_client.get_playlist_tracks(path_args[-1])
+                while True:
+                    tracks.extend(response["items"])
+                    if response["next"] is not None:
+                        response = self._sf_client.make_spotify_req(response["next"])
+                        continue
+                    else:
+                        break
+
+                track_names = [f"{i['track']['name']} {i['track']['artists'][0]['name']}" for i in tracks]
+                result = self._download(track_names[0], ctx, start_time, write_message)
+                self.batch_thread_add_to_playlist(track_names[1:], ctx)
+
+                return result
+            else:
+                if write_message:
+                    self._send_message(ctx, f"Cant download spotify music", logging.ERROR)
+                return None
         else:
             if write_message:
                 self._send_message(ctx, f"Cant download music", logging.ERROR)
