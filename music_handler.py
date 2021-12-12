@@ -314,23 +314,24 @@ class MusicHandler:
             ctx: Context,
             start_time: datetime.datetime,
     ):
-        track = self._download(source, ctx, start_time)
+        track = self._download(source, ctx, start_time, is_im_track=True)
 
-        if self._status == PlayerStatus.PLAYING:
-            current_time, _ = self._current_full_time()
-            current_time = datetime.datetime.fromtimestamp(time.mktime(current_time))
-            self._status = PlayerStatus.NOT_PLAYING
-            self._voice_client.stop()
-            if self._current_queue_track is not None:
-                self._current_queue_track.start_time = current_time
-            time.sleep(SLEEP_TIME)
-            self._current_im_track = track
-            self._try_play(ctx, track, is_im_track=True)
-        elif self._status == PlayerStatus.NOT_PLAYING:
-            self._current_im_track = track
-            self._try_play(ctx, track, is_im_track=True)
-        else:
-            self._send_message(ctx, f"Music shouldn't be paused!", logging.ERROR)
+        if track:
+            if self._status == PlayerStatus.PLAYING:
+                current_time, _ = self._current_full_time()
+                current_time = datetime.datetime.fromtimestamp(time.mktime(current_time))
+                self._status = PlayerStatus.NOT_PLAYING
+                self._voice_client.stop()
+                if self._current_queue_track is not None:
+                    self._current_queue_track.start_time = current_time
+                time.sleep(SLEEP_TIME)
+                self._current_im_track = track
+                self._try_play(ctx, track, is_im_track=True)
+            elif self._status == PlayerStatus.NOT_PLAYING:
+                self._current_im_track = track
+                self._try_play(ctx, track, is_im_track=True)
+            else:
+                self._send_message(ctx, f"Music shouldn't be paused!", logging.ERROR)
 
     def set_music_parameters(
             self,
@@ -466,6 +467,7 @@ class MusicHandler:
             ctx: Context,
             start_time: Optional[datetime.datetime] = None,
             write_message: bool = True,
+            is_im_track: bool = False
     ) -> Optional[Track]:
         parsed_url = parse.urlparse(source)
         netloc = parsed_url.netloc
@@ -488,6 +490,10 @@ class MusicHandler:
                     return None
 
             elif entries := track_info.get("entries"):
+                if is_im_track:
+                    self._send_message(ctx, "Can't play more then one track immediately")
+                    return
+
                 write_message = False
                 start_time = None
                 track_info = entries[0]
@@ -507,6 +513,10 @@ class MusicHandler:
             path_args = parsed_url.path.strip("/").split("/")
 
             if len(path_args) == 2 and path_args[0] == "album" and path_args[1].isnumeric():
+                if is_im_track:
+                    self._send_message(ctx, "Can't play more then one track immediately")
+                    return
+
                 tracks = list(itertools.chain(*self._ym_client.albums_with_tracks(int(path_args[1])).volumes))
                 track = tracks[0]
                 self._download_ym_track(track)
@@ -523,6 +533,9 @@ class MusicHandler:
                     and path_args[2] == "playlists"
                     and path_args[3].isnumeric()
             ):
+                if is_im_track:
+                    self._send_message(ctx, "Can't play more then one track immediately")
+                    return
                 user_login, playlist_id = path_args[1], int(path_args[3])
                 tracks = self._ym_client.users_playlists(playlist_id, user_login).tracks
                 track = tracks[0].track
@@ -564,6 +577,10 @@ class MusicHandler:
 
                 return self._download(track_name, ctx, start_time, write_message)
             elif "album" in path_args:
+                if is_im_track:
+                    self._send_message(ctx, "Can't play more then one track immediately")
+                    return
+
                 response = self._sf_client.get_album(path_args[-1])
                 track_names = [f"{i['name']} {i['artists'][0]['name']}" for i in response["tracks"]["items"]]
                 result = self._download(track_names[0], ctx, start_time, write_message)
@@ -571,6 +588,10 @@ class MusicHandler:
 
                 return result
             elif "playlist" in path_args:
+                if is_im_track:
+                    self._send_message(ctx, "Can't play more then one track immediately")
+                    return
+
                 tracks = []
                 response = self._sf_client.get_playlist_tracks(path_args[-1])
                 while True:
@@ -600,6 +621,7 @@ class MusicHandler:
 
         if write_message:
             self._send_message(ctx, f"Downloaded music - {track.title}")
+
         return track
 
     @staticmethod
