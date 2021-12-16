@@ -1,4 +1,6 @@
 import logging
+import os
+import shutil
 from asyncio import wait_for
 from pathlib import Path
 from typing import Union, Optional, Tuple, Callable
@@ -339,5 +341,20 @@ class MusicBot(Bot):
                 logger.error(str(e))
 
             await self.close()
+
+        @self.command()
+        async def sys_info(ctx: Context) -> None:
+            """Shows system information."""
+            st = os.statvfs(".")
+            free_space = int(st.f_bavail * st.f_frsize / 1024 / 1024)
+            free_memory = int(os.popen("free -t -m").readlines()[-1].split()[3])
+
+            await send_message(ctx, f"Free space - {free_space}mb\nFree memory - {free_memory}mb")
+
+        @self.command()
+        async def free_cache(ctx: Context) -> None:
+            """removes cached tracks."""
+            shutil.rmtree(settings.cached_music_dir)
+            await send_message(ctx, "Cached tracks are removed")
 
         return prepare_and_play
