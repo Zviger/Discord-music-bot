@@ -209,7 +209,7 @@ class MusicHandler:
         current_index = self._show_queue_first_index
         if current_index is not None:
             for i, track in tuple(enumerate(self._queue))[current_index:current_index + self._show_queue_length]:
-                if i == current_id and not self._current_im_track:
+                if i == current_id and not self._current_im_track and self._current_queue_track:
                     current_time, full_time = self._current_full_time()
                     current_time = strftime("%H:%M:%S", current_time)
                     full_time = strftime("%H:%M:%S", full_time)
