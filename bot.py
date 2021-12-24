@@ -183,7 +183,7 @@ class MusicBot(Bot):
             source, start_time = parse_play_args(args)
 
             if self.music_handler:
-                self.music_handler.play(source, ctx, start_time)
+                self.music_handler.add_to_playlist(source, ctx, start_time)
             else:
                 await send_message(ctx, "Can't add to playlist: bot is not in voice channel!", logging.WARNING)
 
