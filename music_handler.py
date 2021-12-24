@@ -352,7 +352,7 @@ class MusicHandler:
             self._voice_client.stop()
             time.sleep(SLEEP_TIME)
             self._current_track.start_time = current_time
-            self._try_play(ctx, self._current_track, msg=False)
+            self._try_play(ctx, self._current_track, msg=False, is_im_track=bool(self._current_im_track))
 
         if self._status == PlayerStatus.PAUSED:
             self._status = PlayerStatus.PAUSED
