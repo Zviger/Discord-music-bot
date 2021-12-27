@@ -380,7 +380,7 @@ class MusicHandler:
                 self.batch_thread_add_to_playlist(track_urls[1:], ctx)
 
     def _send_message(self, ctx: Context, message: str, level: int = logging.INFO, not_only_log=True):
-        embed = Embed(title=message)
+        embed = Embed(title=message if len(message) <= 256 else f"{message[:253]}...")
         if level == logging.INFO:
             logger.info(message)
             embed.colour = Colour.blue()

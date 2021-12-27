@@ -120,7 +120,7 @@ class MusicBot(Bot):
                     return
 
             if self.music_handler:
-                if ctx.author.voice.channel != self.get_guild_voice_client(ctx).channel:
+                if not ctx.author.voice or ctx.author.voice.channel != self.get_guild_voice_client(ctx).channel:
                     await send_message(ctx, "You should be in a voice channel with bot!", logging.WARNING)
                     return
                 play_method(self.music_handler, source, ctx, start_time)
