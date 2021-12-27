@@ -136,6 +136,7 @@ class MusicHandler:
 
     def set_not_playing_status(self) -> None:
         self._status = PlayerStatus.NOT_PLAYING
+        self._set_chill_activity()
 
     def stop(self, ctx: Context):
         if self._status in (PlayerStatus.PLAYING, PlayerStatus.PAUSED):
