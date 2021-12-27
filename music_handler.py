@@ -145,6 +145,7 @@ class MusicHandler:
             self._current_queue_track = None
             self._current_im_track = None
             self._show_queue_first_index = 0
+            self._set_chill_activity()
             self._send_message(ctx, "Stopped!")
         elif self._status == PlayerStatus.NOT_PLAYING:
             self._send_message(ctx, "Bot doesn't play anything!", logging.WARNING)
