@@ -542,13 +542,12 @@ class MusicHandler:
                 tracks = self._ym_client.users_playlists(playlist_id, user_login).tracks
                 track = tracks[0].track
                 self._download_ym_track(track)
-                self.batch_thread_add_to_playlist(
-                    [
-                        f"https://music.yandex.by/album/{(ids := t.track.track_id.split(':'))[1]}/track/{ids[0]}"
-                        for t in tracks[1:]
-                    ],
-                    ctx
-                )
+                ym_tracks_links = []
+                for t in tracks[1:]:
+                    ids = t.track.track_id.split(':')
+                    if len(ids) > 1:
+                        ym_tracks_links.append(f"https://music.yandex.by/album/{ids[1]}/track/{ids[0]}")
+                self.batch_thread_add_to_playlist(ym_tracks_links, ctx)
             elif (
                     len(path_args) == 4
                     and path_args[0] == "album"
