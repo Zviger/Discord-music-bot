@@ -203,7 +203,7 @@ class MusicBot(Bot):
             else:
                 await send_message(ctx, "Can't pause playing: bot is not in voice channel with you!", logging.WARNING)
 
-        @self.command(aliases=("продолжить", "продолжим"))
+        @self.command(aliases=("продолжить", "продолжим", "unpause"))
         async def resume(ctx: Context) -> None:
             """Resume music."""
             if self.is_voice_client_here(ctx):
@@ -218,6 +218,42 @@ class MusicBot(Bot):
                 self.music_handler.next(ctx)
             else:
                 await send_message(ctx, "Can't play next music: bot is not in voice channel with you!", logging.WARNING)
+
+        @self.command()
+        async def prev(ctx: Context) -> None:
+            """Move to the previous music."""
+            if self.is_voice_client_here(ctx):
+                self.music_handler.prev(ctx)
+            else:
+                await send_message(
+                    ctx,
+                    "Can't play previous music: bot is not in voice channel with you!",
+                    logging.WARNING
+                )
+
+        @self.command()
+        async def last(ctx: Context) -> None:
+            """Jump on the last track."""
+            if self.is_voice_client_here(ctx):
+                self.music_handler.jump(ctx, -1)
+            else:
+                await send_message(
+                    ctx,
+                    "Can't play the last music: bot is not in voice channel with you!",
+                    logging.WARNING
+                )
+
+        @self.command()
+        async def first(ctx: Context) -> None:
+            """Jump on the first track."""
+            if self.is_voice_client_here(ctx):
+                self.music_handler.jump(ctx, 0)
+            else:
+                await send_message(
+                    ctx,
+                    "Can't play the first music: bot is not in voice channel with you!",
+                    logging.WARNING
+                )
 
         @self.command(aliases=("q", "очередь"), name="queue")
         async def show_queue(ctx: Context) -> None:

@@ -87,7 +87,7 @@ class MusicHandler:
         self._show_queue_first_index = 0
         self._show_queue_length = 8
         self._lock = threading.Lock()
-        self._ym_client = yandex_music.Client(token=config.tokens["yandex_music"], report_new_fields=False)
+        self._ym_client = yandex_music.Client(token=config.tokens["yandex_music"])
         self._ydl = youtube_dl.YoutubeDL(YDL_OPTIONS)
         self._sf_client = Spotify(config.tokens["spotify_client_id"], config.tokens["spotify_client_secret"])
 
@@ -172,17 +172,37 @@ class MusicHandler:
             self._send_message(ctx, "Resumed!")
 
     def next(self, ctx: Context) -> None:
-        if self._status in (PlayerStatus.PLAYING, PlayerStatus.PAUSED):
-            if track := self._get_next_track():
-                self._status = PlayerStatus.NOT_PLAYING
-                self._voice_client.stop()
-                time.sleep(0.25)
-                self._try_play(ctx, track)
-            else:
-                self._send_message(ctx, f"Can't play next music: end of queue", logging.WARNING)
-                self._set_chill_activity()
-        elif self._status == PlayerStatus.NOT_PLAYING:
-            self._send_message(ctx, "Bot doesn't play anything!", logging.WARNING)
+        if track := self._get_next_track():
+            self._status = PlayerStatus.NOT_PLAYING
+            self._voice_client.stop()
+            time.sleep(0.25)
+            self._try_play(ctx, track)
+        else:
+            self._send_message(ctx, f"Can't play next music: end of queue", logging.WARNING)
+            self._set_chill_activity()
+
+    def prev(self, ctx: Context) -> None:
+        if track := self._get_prev_track():
+            self._status = PlayerStatus.NOT_PLAYING
+            self._voice_client.stop()
+            time.sleep(0.25)
+            self._try_play(ctx, track)
+        else:
+            self._send_message(ctx, f"Can't play prev music: end of queue", logging.WARNING)
+            self._set_chill_activity()
+
+    def jump(self, ctx: Context, index: int) -> None:
+        try:
+            self._queue[index]
+        except IndexError:
+            self._send_message(ctx, "Invalid index value", logging.ERROR)
+            return
+
+        self._status = PlayerStatus.NOT_PLAYING
+        self._current_im_track = None
+        self._voice_client.stop()
+        time.sleep(SLEEP_TIME)
+        self._try_play(ctx, self._queue[index])
 
     async def show_queue(self, ctx: Context):
         self._show_queue_first_index = self._get_current_track_position()
@@ -258,19 +278,6 @@ class MusicHandler:
         if old_index != self._show_queue_first_index:
             embed = self._get_show_queue_embed()
             await self._show_queue_message.edit(embed=embed)
-
-    def jump(self, ctx: Context, index: int) -> None:
-        try:
-            self._queue[index]
-        except IndexError:
-            self._send_message(ctx, "Invalid index value", logging.ERROR)
-            return
-
-        self._status = PlayerStatus.NOT_PLAYING
-        self._current_im_track = None
-        self._voice_client.stop()
-        time.sleep(SLEEP_TIME)
-        self._try_play(ctx, self._queue[index])
 
     def remove(self, ctx: Context, index: int) -> None:
         try:
@@ -656,6 +663,22 @@ class MusicHandler:
             elif next_queue_tack_position < len(self._queue):
                 return self._queue[next_queue_tack_position]
             else:
-                self._current_queue_track = None
+                return None
+        return None
+
+    def _get_prev_track(self, empty_im=True) -> Optional[Track]:
+        if self._current_im_track and empty_im and self._queue:
+            self._current_im_track = None
+
+            return self._current_queue_track
+
+        if (current_queue_track_position := self._get_current_track_position()) is not None:
+            prev_queue_tack_position = current_queue_track_position - 1
+
+            if prev_queue_tack_position == -1 and self._is_loop_queue:
+                return self._queue[-1]
+            elif prev_queue_tack_position > -1:
+                return self._queue[prev_queue_tack_position]
+            else:
                 return None
         return None
