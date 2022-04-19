@@ -19,3 +19,4 @@ class Track:
     creation_time: float
     start_time: datetime.datetime = parser.parse("00:00:00")
     im_start_time: datetime.datetime = parser.parse("00:00:00")
+    is_stream: bool = False

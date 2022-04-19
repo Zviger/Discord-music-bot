@@ -5,3 +5,4 @@ yt_dlp
 yandex_music
 discord.py[voice]
 PyNaCl
+psutil

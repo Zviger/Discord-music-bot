@@ -12,6 +12,7 @@ from time import gmtime, strftime, struct_time
 from typing import Tuple, Optional, List
 from urllib import parse
 
+import psutil
 import yt_dlp as youtube_dl
 from dateutil import parser
 from discord import (
@@ -62,15 +63,18 @@ class YtLogger:
 
 
 YDL_OPTIONS = {
-    "format": "bestaudio",
+    "format": "bestaudio/best",
     "outtmpl": f"{settings.cached_music_dir}/%(id)s",
     "ignoreerrors": True,
     "skip-unavailable-fragments": True,
     "youtube-skip-dash-manifest": True,
     "cache-dir": "~/.cache/youtube-dl",
     "logger": YtLogger,
-    "default_search": "ytsearch",
-
+    "default_search": "auto",
+    "quiet": True,
+    "no_warnings": True,
+    "source_address": "0.0.0.0",
+    "nopart": True,
 }
 
 
@@ -90,6 +94,8 @@ class MusicHandler:
         self._ym_client = yandex_music.Client(token=config.tokens["yandex_music"])
         self._ydl = youtube_dl.YoutubeDL(YDL_OPTIONS)
         self._sf_client = Spotify(config.tokens["spotify_client_id"], config.tokens["spotify_client_secret"])
+        self._stream_download_proc = None
+        self._stream_file_path = None
 
     def add_to_playlist(
             self,
@@ -236,13 +242,14 @@ class MusicHandler:
                     current_time = strftime("%H:%M:%S", current_time)
                     full_time = strftime("%H:%M:%S", full_time)
                     embed.add_field(
-                        name=f"{i + 1}) Current track [{current_time} - {full_time}]",
+                        name=f"{i + 1}) Current track "
+                             f"[{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]",
                         value=f"```css\n{track.title}```",
                         inline=False
                     )
                 else:
                     embed.add_field(
-                        name=f"{i + 1}) {datetime.timedelta(seconds=track.length)}",
+                        name=f"{i + 1}) {'STREAM' if track.is_stream else datetime.timedelta(seconds=track.length)}",
                         value=f"```css\n{track.title}```",
                         inline=False
                     )
@@ -313,7 +320,10 @@ class MusicHandler:
             current_time, full_time = self._current_full_time()
             current_time = strftime("%H:%M:%S", current_time)
             full_time = strftime("%H:%M:%S", full_time)
-            self._send_message(ctx, f"{track.title} [{current_time} - {full_time}]\n{track.link}")
+            self._send_message(
+                ctx,
+                f"{track.title} [{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]\n{track.link}"
+            )
         else:
             self._send_message(ctx, f"Nothing is playing")
 
@@ -407,17 +417,35 @@ class MusicHandler:
             track.im_start_time = track.start_time
             start_time = track.start_time.strftime("%H:%M:%S")
             track.start_time = parser.parse("00:00:00")
-            self._voice_client.play(
-                PCMVolumeTransformer(
-                    FFmpegPCMAudio(
-                        Path(settings.cached_music_dir).joinpath(track.id),
-                        before_options=f"-ss {start_time}",
-                        options=f"-af bass=g={config.bass_value}"
+
+            if track.is_stream:
+                Thread(target=self._ydl.download, args=(track.link,)).start()
+                time.sleep(5)
+                self._stream_download_proc = [proc for proc in psutil.process_iter() if proc.name() == "ffmpeg"][-1]
+                self._stream_file_path = Path(settings.cached_music_dir).joinpath(track.id)
+
+                self._voice_client.play(
+                    PCMVolumeTransformer(
+                        FFmpegPCMAudio(
+                            self._stream_file_path,
+                            options=f"-af bass=g={config.bass_value}"
+                        ),
+                        volume=config.volume_value / 100
                     ),
-                    volume=config.volume_value / 100
-                ),
-                after=self._on_music_end(ctx),
-            )
+                    after=self._on_music_end(ctx),
+                )
+            else:
+                self._voice_client.play(
+                    PCMVolumeTransformer(
+                        FFmpegPCMAudio(
+                            Path(settings.cached_music_dir).joinpath(track.id),
+                            before_options=f"-ss {start_time}",
+                            options=f"-af bass=g={config.bass_value}"
+                        ),
+                        volume=config.volume_value / 100
+                    ),
+                    after=self._on_music_end(ctx),
+                )
             self._status = PlayerStatus.PLAYING
 
             if is_im_track:
@@ -427,8 +455,9 @@ class MusicHandler:
             if msg:
                 self._send_message(
                     ctx,
-                    f"Now is playing - {track.title} [{start_time} -"
-                    f" {datetime.timedelta(seconds=track.length)}]\nLink - {track.link}"
+                    f"Now is playing - {track.title} ["
+                    f"{'STREAM' if track.is_stream else f'{start_time} - {datetime.timedelta(seconds=track.length)}'}"
+                    f"]\nLink - {track.link}"
                 )
             self._loop.create_task(
                 self._voice_client.client.change_presence(
@@ -448,6 +477,11 @@ class MusicHandler:
 
     def _on_music_end(self, ctx: Context):
         def on_music_end(error) -> None:
+            if self._stream_download_proc is not None:
+                self._stream_download_proc.kill()
+                self._stream_download_proc = None
+                self._stream_file_path.unlink()
+
             if error:
                 logger.error(error)
             else:
@@ -481,13 +515,20 @@ class MusicHandler:
         parsed_url = parse.urlparse(source)
         netloc = parsed_url.netloc
 
-        if (
+        if (track_info := self._ydl.extract_info(source, download=False)).get("is_live"):
+            track = Track(
+                id=track_info["id"],
+                title=track_info["title"].strip(),
+                link=track_info["original_url"].strip(),
+                length=0,
+                creation_time=time.time(),
+                is_stream=True
+            )
+        elif (
                 netloc.startswith(SearchDomains.youtube.value)
                 or netloc.startswith(SearchDomains.youtube_short.value)
                 or not netloc
         ):
-            track_info = self._ydl.extract_info(source, download=False)
-
             if not netloc:
                 entries = track_info["entries"]
                 if entries:
@@ -497,7 +538,6 @@ class MusicHandler:
                     if write_message:
                         self._send_message(ctx, f"Cant download youtube music {source}", logging.ERROR)
                     return None
-
             elif entries := track_info.get("entries"):
                 if is_im_track:
                     self._send_message(ctx, "Can't play more then one track immediately")
@@ -628,7 +668,10 @@ class MusicHandler:
             track.start_time = start_time
 
         if write_message:
-            self._send_message(ctx, f"Downloaded music - {track.title}")
+            if track.is_stream:
+                self._send_message(ctx, f"Stream is ready - {track.title}")
+            else:
+                self._send_message(ctx, f"Downloaded music - {track.title}")
 
         return track
 
