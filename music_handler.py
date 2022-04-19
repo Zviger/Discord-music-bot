@@ -231,7 +231,8 @@ class MusicHandler:
             current_time, full_time = self._current_full_time()
             current_time = strftime("%H:%M:%S", current_time)
             full_time = strftime("%H:%M:%S", full_time)
-            current_track_strings = f"{track.title} [{current_time} - {full_time}]"
+            current_track_strings = (f"{track.title} "
+                                     f"[{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]")
             embed.add_field(name="Immediately track", value=f"```css\n{current_track_strings or 'empty'}```")
 
         current_index = self._show_queue_first_index
@@ -420,7 +421,11 @@ class MusicHandler:
 
             if track.is_stream:
                 Thread(target=self._ydl.download, args=(track.link,)).start()
-                time.sleep(5)
+                time_sleep = 5
+                if track.is_twitch:
+                    time_sleep = 30
+                time.sleep(time_sleep)
+
                 self._stream_download_proc = [proc for proc in psutil.process_iter() if proc.name() == "ffmpeg"][-1]
                 self._stream_file_path = Path(settings.cached_music_dir).joinpath(track.id)
 
@@ -522,7 +527,8 @@ class MusicHandler:
                 link=track_info["original_url"].strip(),
                 length=0,
                 creation_time=time.time(),
-                is_stream=True
+                is_stream=True,
+                is_twitch="twitch" in track_info["webpage_url_domain"]
             )
         elif (
                 netloc.startswith(SearchDomains.youtube.value)
