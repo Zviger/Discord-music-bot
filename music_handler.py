@@ -520,51 +520,7 @@ class MusicHandler:
         parsed_url = parse.urlparse(source)
         netloc = parsed_url.netloc
 
-        if (track_info := self._ydl.extract_info(source, download=False)).get("is_live"):
-            track = Track(
-                id=track_info["id"],
-                title=track_info["title"].strip(),
-                link=track_info["original_url"].strip(),
-                length=0,
-                creation_time=time.time(),
-                is_stream=True,
-                is_twitch="twitch" in track_info["webpage_url_domain"]
-            )
-        elif (
-                netloc.startswith(SearchDomains.youtube.value)
-                or netloc.startswith(SearchDomains.youtube_short.value)
-                or not netloc
-        ):
-            if not netloc:
-                entries = track_info["entries"]
-                if entries:
-                    track_info = entries[0]
-                    self._ydl.download(track_info["original_url"])
-                else:
-                    if write_message:
-                        self._send_message(ctx, f"Cant download youtube music {source}", logging.ERROR)
-                    return None
-            elif entries := track_info.get("entries"):
-                if is_im_track:
-                    self._send_message(ctx, "Can't play more then one track immediately")
-                    return
-
-                write_message = False
-                start_time = None
-                track_info = entries[0]
-                self._ydl.download(track_info["original_url"])
-                self.batch_thread_add_to_playlist([entry["original_url"] for entry in entries[1:] if entry], ctx)
-            else:
-                self._ydl.download(track_info["original_url"])
-
-            track = Track(
-                id=track_info["id"],
-                title=track_info["title"].strip(),
-                link=track_info["original_url"].strip(),
-                length=track_info["duration"],
-                creation_time=time.time()
-            )
-        elif netloc.startswith(SearchDomains.yandex_music.value):
+        if netloc.startswith(SearchDomains.yandex_music.value):
             path_args = parsed_url.path.strip("/").split("/")
 
             if len(path_args) == 2 and path_args[0] == "album" and path_args[1].isnumeric():
@@ -665,6 +621,50 @@ class MusicHandler:
                 if write_message:
                     self._send_message(ctx, f"Cant download spotify music", logging.ERROR)
                 return None
+        elif (track_info := self._ydl.extract_info(source, download=False)).get("is_live"):
+            track = Track(
+                id=track_info["id"],
+                title=track_info["title"].strip(),
+                link=track_info["original_url"].strip(),
+                length=0,
+                creation_time=time.time(),
+                is_stream=True,
+                is_twitch="twitch" in track_info["webpage_url_domain"]
+            )
+        elif (
+                netloc.startswith(SearchDomains.youtube.value)
+                or netloc.startswith(SearchDomains.youtube_short.value)
+                or not netloc
+        ):
+            if not netloc:
+                entries = track_info["entries"]
+                if entries:
+                    track_info = entries[0]
+                    self._ydl.download(track_info["original_url"])
+                else:
+                    if write_message:
+                        self._send_message(ctx, f"Cant download youtube music {source}", logging.ERROR)
+                    return None
+            elif entries := track_info.get("entries"):
+                if is_im_track:
+                    self._send_message(ctx, "Can't play more then one track immediately")
+                    return
+
+                write_message = False
+                start_time = None
+                track_info = entries[0]
+                self._ydl.download(track_info["original_url"])
+                self.batch_thread_add_to_playlist([entry["original_url"] for entry in entries[1:] if entry], ctx)
+            else:
+                self._ydl.download(track_info["original_url"])
+
+            track = Track(
+                id=track_info["id"],
+                title=track_info["title"].strip(),
+                link=track_info["original_url"].strip(),
+                length=track_info["duration"],
+                creation_time=time.time()
+            )
         else:
             if write_message:
                 self._send_message(ctx, f"Cant download music", logging.ERROR)
