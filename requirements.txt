@@ -6,3 +6,4 @@ yandex_music
 discord.py[voice]
 PyNaCl
 psutil
+crontab

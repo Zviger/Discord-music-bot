@@ -1,10 +1,13 @@
+import asyncio
 import logging
 import os
 import shutil
 from asyncio import wait_for
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Union, Optional, Tuple, Callable
 
+from crontab import CronTab
 from discord import (
     User,
     Member,
@@ -48,9 +51,27 @@ class MusicBot(Bot):
 
         return voice_client and voice_client.channel == ctx.author.voice.channel
 
+    async def speak(self):
+        await self.wait_until_ready()
+        cron = CronTab("*/1  * * * *")
+        while True:
+            await asyncio.sleep(cron.next(default_utc=False))
+            try:
+                first_time = datetime.now()
+                later_time = datetime(2022, 5, 10, 21)
+                difference = later_time - first_time
+                timedelta(0, 8, 562000)
+                hours = int(difference.days * 24 + difference.seconds / 60 / 60)
+                channel: TextChannel = self.get_channel(config.channels.get("music"))
+                await channel.send(f"Часов до покупки компа {hours} +- 2")
+            except Exception:
+                print(f'Hui')
+
     async def on_ready(self) -> None:
         logger.info(f"We have logged in as {self.user}")
         await self.change_presence(status=Status.online, activity=Activity(name="кочалке", type=ActivityType.competing))
+        self.loop.create_task(self.speak())
+
 
     async def on_reaction_add(self, reaction: Reaction, user: Union[Member, User]) -> None:
         if (
