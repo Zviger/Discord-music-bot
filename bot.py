@@ -53,14 +53,13 @@ class MusicBot(Bot):
 
     async def speak(self):
         await self.wait_until_ready()
-        cron = CronTab("*/1  * * * *")
+        cron = CronTab("* * * * *")
         while True:
-            await asyncio.sleep(cron.next(default_utc=False))
+            await asyncio.sleep(cron.next())
             try:
                 first_time = datetime.now()
                 later_time = datetime(2022, 5, 10, 21)
                 difference = later_time - first_time
-                timedelta(0, 8, 562000)
                 hours = int(difference.days * 24 + difference.seconds / 60 / 60)
                 channel: TextChannel = self.get_channel(config.channels.get("music"))
                 await channel.send(f"Часов до покупки компа {hours} +- 2")
