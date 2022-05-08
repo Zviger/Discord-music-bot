@@ -3,7 +3,7 @@ import logging
 import os
 import shutil
 from asyncio import wait_for
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Union, Optional, Tuple, Callable
 
@@ -53,9 +53,9 @@ class MusicBot(Bot):
 
     async def speak(self):
         await self.wait_until_ready()
-        cron = CronTab("* * * * *")
+        cron = CronTab("* */10 * * *")
         while True:
-            await asyncio.sleep(cron.next())
+            await asyncio.sleep(cron.next(default_utc=True))
             try:
                 first_time = datetime.now()
                 later_time = datetime(2022, 5, 10, 21)
@@ -70,7 +70,6 @@ class MusicBot(Bot):
         logger.info(f"We have logged in as {self.user}")
         await self.change_presence(status=Status.online, activity=Activity(name="кочалке", type=ActivityType.competing))
         self.loop.create_task(self.speak())
-
 
     async def on_reaction_add(self, reaction: Reaction, user: Union[Member, User]) -> None:
         if (
@@ -105,6 +104,16 @@ class MusicBot(Bot):
 
     async def on_voice_state_update(self, member: Union[Member, User], before: VoiceState, _: VoiceState) -> None:
         if before.channel is None:
+            member_join_at_delta = datetime.now() - member.joined_at
+            if member_join_at_delta.seconds / 60 < 10 and member_join_at_delta.days == 0:
+                if channel_id := config.channels.get("general"):
+                    channel: TextChannel = self.get_channel(channel_id)
+                    await channel.send(
+                        content=f"Привет, <@{member.id}>. <@{self.user.id}> - "
+                                f"это музыкальный бот, сделай его тише или замуть.",
+                        mention_author=True,
+                        delete_after=60
+                    )
             if user_setting := config.users_settings.get(member.id):
                 if channel_id := config.channels.get("general"):
                     channel: TextChannel = self.get_channel(channel_id)
