@@ -12,7 +12,7 @@ from settings import settings
 logger = logging.getLogger(settings.app_name)
 
 
-class SearchDomains(Enum):
+class SearchDomains(str, Enum):
     youtube = "www.youtube.com"
     youtube_short = "youtu.be"
     yandex_music = "music.yandex"

@@ -1,14 +1,14 @@
-import datetime
 import itertools
 import logging
 import random
 import threading
 import time
+import uuid
+from datetime import timedelta, datetime
 from asyncio import AbstractEventLoop
 from enum import Enum
 from pathlib import Path
 from threading import Thread
-from time import gmtime, strftime, struct_time
 from typing import Tuple, Optional, List
 from urllib import parse
 
@@ -101,7 +101,7 @@ class MusicHandler:
             self,
             source: str,
             ctx: Context,
-            start_time: Optional[datetime.datetime],
+            start_time: Optional[datetime],
             write_message: bool = True
     ):
         track = self._download(source, ctx, start_time, write_message=write_message)
@@ -131,7 +131,7 @@ class MusicHandler:
             self,
             source: str,
             ctx: Context,
-            start_time: Optional[datetime.datetime],
+            start_time: Optional[datetime],
             download_message: bool = True):
         track = self._download(source, ctx, start_time, download_message)
         if track is not None:
@@ -229,8 +229,9 @@ class MusicHandler:
 
         if track := self._current_im_track:
             current_time, full_time = self._current_full_time()
-            current_time = strftime("%H:%M:%S", current_time)
-            full_time = strftime("%H:%M:%S", full_time)
+
+            current_time = current_time.strftime("%H:%M:%S")
+            full_time = full_time.strftime("%H:%M:%S")
             current_track_strings = (f"{track.title} "
                                      f"[{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]")
             embed.add_field(name="Immediately track", value=f"```css\n{current_track_strings or 'empty'}```")
@@ -240,8 +241,8 @@ class MusicHandler:
             for i, track in tuple(enumerate(self._queue))[current_index:current_index + self._show_queue_length]:
                 if i == current_id and not self._current_im_track and self._current_queue_track:
                     current_time, full_time = self._current_full_time()
-                    current_time = strftime("%H:%M:%S", current_time)
-                    full_time = strftime("%H:%M:%S", full_time)
+                    current_time = current_time.strftime("%H:%M:%S")
+                    full_time = full_time.strftime("%H:%M:%S")
                     embed.add_field(
                         name=f"{i + 1}) Current track "
                              f"[{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]",
@@ -250,7 +251,7 @@ class MusicHandler:
                     )
                 else:
                     embed.add_field(
-                        name=f"{i + 1}) {'STREAM' if track.is_stream else datetime.timedelta(seconds=track.length)}",
+                        name=f"{i + 1}) {'STREAM' if track.is_stream else timedelta(seconds=track.length)}",
                         value=f"```css\n{track.title}```",
                         inline=False
                     )
@@ -319,8 +320,8 @@ class MusicHandler:
     def now_playing(self, ctx: Context):
         if track := self._current_track:
             current_time, full_time = self._current_full_time()
-            current_time = strftime("%H:%M:%S", current_time)
-            full_time = strftime("%H:%M:%S", full_time)
+            current_time = current_time.strftime("%H:%M:%S")
+            full_time = full_time.strftime("%H:%M:%S")
             self._send_message(
                 ctx,
                 f"{track.title} [{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]\n{track.link}"
@@ -332,14 +333,13 @@ class MusicHandler:
             self,
             source: str,
             ctx: Context,
-            start_time: datetime.datetime,
+            start_time: datetime,
     ):
         track = self._download(source, ctx, start_time, is_im_track=True)
 
         if track:
             if self._status == PlayerStatus.PLAYING:
                 current_time, _ = self._current_full_time()
-                current_time = datetime.datetime.fromtimestamp(time.mktime(current_time))
                 self._status = PlayerStatus.NOT_PLAYING
                 self._voice_client.stop()
                 if self._current_queue_track is not None:
@@ -367,7 +367,7 @@ class MusicHandler:
 
         if self._status == PlayerStatus.PLAYING:
             current_time, _ = self._current_full_time()
-            current_time = datetime.datetime.fromtimestamp(time.mktime(current_time) + SLEEP_TIME)
+            current_time = current_time + timedelta(seconds=SLEEP_TIME)
             self._status = PlayerStatus.NOT_PLAYING
             self._voice_client.stop()
             time.sleep(SLEEP_TIME)
@@ -426,13 +426,16 @@ class MusicHandler:
                     time_sleep = 30
                 time.sleep(time_sleep)
 
-                self._stream_download_proc = [proc for proc in psutil.process_iter() if proc.name() == "ffmpeg"][-1]
+
+                self._stream_download_proc = [
+                    proc for proc in psutil.process_iter() if proc.name().startswith("ffmpeg")
+                ][-1]
                 self._stream_file_path = Path(settings.cached_music_dir).joinpath(track.id)
 
                 self._voice_client.play(
                     PCMVolumeTransformer(
                         FFmpegPCMAudio(
-                            self._stream_file_path,
+                            str(self._stream_file_path),
                             options=f"-af bass=g={config.bass_value}"
                         ),
                         volume=config.volume_value / 100
@@ -443,7 +446,7 @@ class MusicHandler:
                 self._voice_client.play(
                     PCMVolumeTransformer(
                         FFmpegPCMAudio(
-                            Path(settings.cached_music_dir).joinpath(track.id),
+                            str(Path(settings.cached_music_dir).joinpath(track.id)),
                             before_options=f"-ss {start_time}",
                             options=f"-af bass=g={config.bass_value}"
                         ),
@@ -461,7 +464,7 @@ class MusicHandler:
                 self._send_message(
                     ctx,
                     f"Now is playing - {track.title} ["
-                    f"{'STREAM' if track.is_stream else f'{start_time} - {datetime.timedelta(seconds=track.length)}'}"
+                    f"{'STREAM' if track.is_stream else f'{start_time} - {timedelta(seconds=track.length)}'}"
                     f"]\nLink - {track.link}"
                 )
             self._loop.create_task(
@@ -496,15 +499,19 @@ class MusicHandler:
                         self._try_play(ctx, track)
                     else:
                         self._set_chill_activity()
+                        self._current_queue_track = None
+                        self._current_im_track = None
 
         return on_music_end
 
-    def _current_full_time(self) -> Tuple[struct_time, struct_time]:
+    def _current_full_time(self) -> Tuple[datetime, datetime]:
         track = self._current_track
         a_timedelta = track.im_start_time - parser.parse("00:00:00")
         seconds = a_timedelta.total_seconds()
+        current_time = timedelta(seconds=self._voice_client._player.loops * 0.02 + seconds) + parser.parse("00:00:00")
+        full_time = timedelta(seconds=track.length) + parser.parse("00:00:00")
 
-        return gmtime(self._voice_client._player.loops * 0.02 + seconds), gmtime(track.length)
+        return current_time, full_time
 
     def _add_track_to_queue(self, track: Track) -> None:
         self._queue.append(track)
@@ -513,14 +520,14 @@ class MusicHandler:
             self,
             source: str,
             ctx: Context,
-            start_time: Optional[datetime.datetime] = None,
+            start_time: Optional[datetime] = None,
             write_message: bool = True,
             is_im_track: bool = False
     ) -> Optional[Track]:
         parsed_url = parse.urlparse(source)
         netloc = parsed_url.netloc
 
-        if netloc.startswith(SearchDomains.yandex_music.value):
+        if netloc.startswith(SearchDomains.yandex_music):
             path_args = parsed_url.path.strip("/").split("/")
 
             if len(path_args) == 2 and path_args[0] == "album" and path_args[1].isnumeric():
@@ -576,9 +583,9 @@ class MusicHandler:
                 title=track.title,
                 link=source,
                 length=track.duration_ms // 1000,
-                creation_time=time.time()
+                uuid=uuid.uuid4(),
             )
-        elif netloc.startswith(SearchDomains.spotify.value):
+        elif netloc.startswith(SearchDomains.spotify):
             path_args = parsed_url.path.split("/")
 
             if "track" in path_args:
@@ -627,13 +634,13 @@ class MusicHandler:
                 title=track_info["title"].strip(),
                 link=track_info["original_url"].strip(),
                 length=0,
-                creation_time=time.time(),
                 is_stream=True,
-                is_twitch="twitch" in track_info["webpage_url_domain"]
+                is_twitch="twitch" in track_info["webpage_url_domain"],
+                uuid=uuid.uuid4(),
             )
         elif (
-                netloc.startswith(SearchDomains.youtube.value)
-                or netloc.startswith(SearchDomains.youtube_short.value)
+                netloc.startswith(SearchDomains.youtube)
+                or netloc.startswith(SearchDomains.youtube_short)
                 or not netloc
         ):
             if not netloc:
@@ -663,7 +670,7 @@ class MusicHandler:
                 title=track_info["title"].strip(),
                 link=track_info["original_url"].strip(),
                 length=track_info["duration"],
-                creation_time=time.time()
+                uuid=uuid.uuid4(),
             )
         else:
             if write_message:
@@ -695,7 +702,7 @@ class MusicHandler:
             return 0
 
         for i in range(len(self._queue)):
-            if self._queue[i].creation_time == self._current_queue_track.creation_time:
+            if self._queue[i].uuid == self._current_queue_track.uuid:
                 return i
         return None
 

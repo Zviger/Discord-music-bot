@@ -16,7 +16,7 @@ class Config:
         self.load_config()
 
     def load_config(self) -> None:
-        self.config.read(settings.config_file)
+        self.config.read(settings.config_file, encoding="utf-8")
 
         if self.config.has_section("music"):
             music_section = self.config["music"]
@@ -43,7 +43,7 @@ class Config:
         self.config["music"]["bass"] = str(self.bass_value)
         self.config["music"]["volume"] = str(self.volume_value)
 
-        with open(settings.config_file, "w") as config_file:
+        with open(settings.config_file, "w", encoding="utf-8") as config_file:
             self.config.write(config_file)
 
 

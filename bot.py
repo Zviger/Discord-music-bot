@@ -1,13 +1,11 @@
-import asyncio
 import logging
 import os
 import shutil
 from asyncio import wait_for
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Union, Optional, Tuple, Callable
 
-from crontab import CronTab
 from discord import (
     User,
     Member,
@@ -29,6 +27,11 @@ from config import config
 from music_handler import MusicHandler
 from settings import settings
 from utils import send_message, parse_play_args
+
+now = datetime.now()
+local_now = now.astimezone()
+local_tz = local_now.tzinfo
+local_tzname = local_tz.tzname(local_now)
 
 logger = logging.getLogger(settings.app_name)
 
@@ -81,14 +84,14 @@ class MusicBot(Bot):
                 content="Все сюдаааааааааааааа!",
                 tts=True,
                 file=File("images/vse_suda.jpg"),
-                delete_after=100
+                delete_after=1006
             )
         else:
             await Bot.on_message(self, message)
 
     async def on_voice_state_update(self, member: Union[Member, User], before: VoiceState, _: VoiceState) -> None:
         if before.channel is None:
-            member_join_at_delta = datetime.now() - member.joined_at
+            member_join_at_delta = datetime.now(tz=local_tz) - member.joined_at.astimezone(tz=local_tz)
             if member_join_at_delta.seconds / 60 < 10 and member_join_at_delta.days == 0:
                 if channel_id := config.channels.get("general"):
                     channel: TextChannel = self.get_channel(channel_id)
@@ -99,6 +102,7 @@ class MusicBot(Bot):
                         delete_after=60
                     )
             if user_setting := config.users_settings.get(member.id):
+                
                 if channel_id := config.channels.get("general"):
                     channel: TextChannel = self.get_channel(channel_id)
                     logger.info(f"Send grating message to {member}")

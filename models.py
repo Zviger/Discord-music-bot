@@ -1,5 +1,6 @@
 import datetime
 from dataclasses import dataclass
+from uuid import UUID
 
 from dateutil import parser
 
@@ -16,7 +17,7 @@ class Track:
     title: str
     link: str
     length: int
-    creation_time: float
+    uuid: UUID
     start_time: datetime.datetime = parser.parse("00:00:00")
     im_start_time: datetime.datetime = parser.parse("00:00:00")
     is_stream: bool = False
