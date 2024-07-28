@@ -1,0 +1,81 @@
+import asyncio
+import itertools
+import uuid
+from pathlib import Path
+from urllib import parse
+
+import yandex_music
+from yandex_music.utils.request_async import Request
+
+from exceptions import CantDownloadException, BatchDownloadNotAllowed
+from models import Track
+from music_downloaders.base import MusicDownloader
+
+
+class YandexMusicDownloader(MusicDownloader):
+    def __init__(self, token: str, cache_dir: str) -> None:
+        self._request = Request(timeout=1000)
+        self._client = yandex_music.ClientAsync(token=token, request=self._request)
+        self._request.set_and_return_client(self._client)
+        self._cache_dir = cache_dir
+
+    async def download(
+        self, source: str, batch_download_allowed: bool = True, force_load_first: bool = False
+    ) -> list[Track]:
+        parsed_url = parse.urlparse(source)
+        path_args = parsed_url.path.strip("/").split("/")
+        tracks = []
+
+        if len(path_args) == 2 and path_args[0] == "album" and path_args[1].isnumeric():
+            album = await self._client.albums_with_tracks(int(path_args[1]))
+            ym_tracks = itertools.chain(*album.volumes)
+        elif (
+            len(path_args) == 4 and path_args[0] == "users" and path_args[2] == "playlists" and path_args[3].isnumeric()
+        ):
+            user_login, playlist_id = path_args[1], int(path_args[3])
+            playslist = await self._client.users_playlists(playlist_id, user_login)
+            ym_tracks = []
+            for ym_track_short in playslist.tracks:
+                ym_tracks.append(await ym_track_short.fetch_track_async())
+        elif (
+            len(path_args) == 4
+            and path_args[0] == "album"
+            and path_args[1].isnumeric()
+            and path_args[2] == "track"
+            and path_args[3].isnumeric()
+        ):
+            ym_tracks = await self._client.tracks(f"{path_args[3]}:{path_args[1]}")
+        else:
+            raise CantDownloadException("Cant download yandex music")
+
+        if len(ym_tracks) > 1 and not batch_download_allowed:
+            raise BatchDownloadNotAllowed
+
+        for i, ym_track in enumerate(ym_tracks):
+            ym_track: yandex_music.Track
+            if not ym_track.available:
+                continue
+
+            track = await self._download(ym_track, force_load=force_load_first and i == 0)
+            tracks.append(track)
+
+        return tracks
+
+    async def _download(self, track: yandex_music.Track, force_load: bool) -> Track:
+        download_task = None
+
+        if not (filepath := Path(self._cache_dir).joinpath(track.track_id)).exists():
+            download_task = asyncio.create_task(track.downloadAsync(str(filepath), codec="aac", bitrate_in_kbps=128))
+            if force_load:
+                await download_task
+
+        track_id, album_id = track.track_id.split(":")
+
+        return Track(
+            id=track.track_id,
+            title=track.title,
+            link=f"https://music.yandex.by/album/{album_id}/track/{track_id}",
+            duration=track.duration_ms // 1000,
+            uuid=uuid.uuid4(),
+            download_task=download_task,
+        )

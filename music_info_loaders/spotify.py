@@ -1,0 +1,34 @@
+from urllib import parse
+
+from exceptions import CantLoadTrackInfoException
+from music_clients.spotify import SpotifyMusicClient
+
+
+class SpotifyInfoLoader:
+    def __init__(self, client_id: str, client_secret: str) -> None:
+        self._client = SpotifyMusicClient(client_id=client_id, client_secret=client_secret)
+
+    async def get_track_names(self, source: str) -> list[str]:
+        parsed_url = parse.urlparse(source)
+        path_args = parsed_url.path.split("/")
+
+        if "track" in path_args:
+            response = await self._client.get_track(path_args[-1])
+            return [f"{response['artists'][0]['name']} {response['name']}"]
+        elif "album" in path_args:
+            response = await self._client.get_album(path_args[-1])
+            return [f"{i['name']} {i['artists'][0]['name']}" for i in response["tracks"]["items"]]
+        elif "playlist" in path_args:
+            tracks = []
+            response = await self._client.get_playlist_tracks(path_args[-1])
+            while True:
+                tracks.extend(response["items"])
+                if response["next"] is not None:
+                    response = await self._client.make_spotify_req(response["next"])
+                    continue
+                else:
+                    break
+
+            return [f"{i['track']['name']} {i['track']['artists'][0]['name']}" for i in tracks]
+        else:
+            raise CantLoadTrackInfoException("Can't load track's spotify info")

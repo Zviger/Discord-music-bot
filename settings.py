@@ -1,19 +1,19 @@
 import logging
 
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    command_prefix = "-"
-    app_name = "Music Bot"
-    cached_music_dir = "cached_music"
-    config_file = "config.ini"
-    arrow_up_small = b"\xf0\x9f\x94\xbc".decode("utf-8")
-    arrow_down_small = b"\xf0\x9f\x94\xbd".decode("utf-8")
-    double_arrow_up_small = b"\xe2\x8f\xab".decode("utf-8")
-    double_arrow_down_small = b"\xe2\x8f\xac".decode("utf-8")
-    record_button = b"\xe2\x8f\xba\xef\xb8\x8f".decode("utf-8")
-    restart = False
+    command_prefix: str = "-"
+    app_name: str = "Music Bot"
+    cached_music_dir: str = "cached_music"
+    config_file: str = "config.ini"
+    arrow_up_small: str = "⬆️"
+    arrow_down_small: str = "🔽"
+    double_arrow_up_small: str = "⏫"
+    double_arrow_down_small: str = "⏬"
+    record_button: str = "⏺️"
+    restart: bool = False
 
 
 settings = Settings()

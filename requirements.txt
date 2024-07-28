@@ -1,5 +1,6 @@
 python-dateutil
 pydantic
+pydantic-settings
 discord
 yt_dlp
 yandex_music

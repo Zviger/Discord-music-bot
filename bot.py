@@ -31,7 +31,6 @@ from utils import send_message, parse_play_args
 now = datetime.now()
 local_now = now.astimezone()
 local_tz = local_now.tzinfo
-local_tzname = local_tz.tzname(local_now)
 
 logger = logging.getLogger(settings.app_name)
 
@@ -44,9 +43,11 @@ class MusicBot(Bot):
 
     def get_guild_voice_client(self, ctx: Context) -> Optional[VoiceClient]:
         author = ctx.author
+
         for voice_client in self.voice_clients:
-            if voice_client.guild == author.guild:
+            if author.guild in voice_client.client.guilds:
                 return voice_client
+
         return None
 
     def is_voice_client_here(self, ctx: Context) -> bool:
@@ -63,12 +64,13 @@ class MusicBot(Bot):
             user.id != self.user.id
             and self.music_handler
             and self.music_handler.is_show_query_message(reaction.message)
-            and reaction.emoji in (
-                    settings.arrow_up_small,
-                    settings.arrow_down_small,
-                    settings.record_button,
-                    settings.double_arrow_up_small,
-                    settings.double_arrow_down_small,
+            and reaction.emoji
+            in (
+                settings.arrow_up_small,
+                settings.arrow_down_small,
+                settings.record_button,
+                settings.double_arrow_up_small,
+                settings.double_arrow_down_small,
             )
         ):
             await self.music_handler.move_show_query(reaction.emoji)
@@ -81,10 +83,7 @@ class MusicBot(Bot):
 
         if message.mention_everyone:
             await message.channel.send(
-                content="Все сюдаааааааааааааа!",
-                tts=True,
-                file=File("images/vse_suda.jpg"),
-                delete_after=1006
+                content="Все сюдаааааааааааааа!", tts=True, file=File("images/vse_suda.jpg"), delete_after=1006
             )
         else:
             await Bot.on_message(self, message)
@@ -97,19 +96,18 @@ class MusicBot(Bot):
                     channel: TextChannel = self.get_channel(channel_id)
                     await channel.send(
                         content=f"Привет, <@{member.id}>. <@{self.user.id}> - "
-                                f"это музыкальный бот, сделай его тише или замуть.",
+                        f"это музыкальный бот, сделай его тише или замуть.",
                         mention_author=True,
-                        delete_after=60
+                        delete_after=60,
                     )
             if user_setting := config.users_settings.get(member.id):
-                
                 if channel_id := config.channels.get("general"):
                     channel: TextChannel = self.get_channel(channel_id)
                     logger.info(f"Send grating message to {member}")
                     await channel.send(
                         content=user_setting.gratings_text,
                         file=File(Path("images").joinpath(user_setting.gratings_image_name)),
-                        delete_after=10
+                        delete_after=10,
                     )
             else:
                 logger.info(f"Member {member} is here.")
@@ -117,14 +115,10 @@ class MusicBot(Bot):
     async def on_member_ban(self, _: Guild, user: User) -> None:
         if channel_id := config.channels.get("general"):
             channel: TextChannel = self.get_channel(channel_id)
-            await channel.send(
-                content=f"{user.name}, бан, чучело",
-                tts=True,
-                file=File("images/ban.jpg")
-            )
+            await channel.send(content=f"{user.name}, бан, чучело", tts=True, file=File("images/ban.jpg"))
 
     def setup_commands(self) -> Callable:
-        async def prepare_and_play(args: Tuple[str], ctx: Context, play_method: callable):
+        async def prepare_and_play(args: Tuple[str, ...], ctx: Context, play_method: callable):
             source, start_time = parse_play_args(args)
             voice_client = self.get_guild_voice_client(ctx)
             if not voice_client:
@@ -140,17 +134,17 @@ class MusicBot(Bot):
                 if not ctx.author.voice or ctx.author.voice.channel != self.get_guild_voice_client(ctx).channel:
                     await send_message(ctx, "You should be in a voice channel with bot!", logging.WARNING)
                     return
-                play_method(self.music_handler, source, ctx, start_time)
+                await play_method(self.music_handler, source, ctx, start_time)
             else:
                 await send_message(ctx, "Can't play, bot is not in voice channel!", logging.WARNING)
 
-        @self.command(aliases=("здарова", ))
+        @self.command(aliases=("здарова",))
         async def hello(ctx: Context) -> None:
             """Sends hello message."""
             emoji = await ctx.guild.fetch_emoji(715199900966584361)
             await send_message(ctx, f"Hello, {ctx.author}! {emoji}")
 
-        @self.command(aliases=("сюда", ))
+        @self.command(aliases=("сюда",))
         async def summon(ctx: Context, move=True) -> None:
             """Summon bot in current voice channel."""
             logger.info(f"{ctx.author} started summoning")
@@ -179,7 +173,7 @@ class MusicBot(Bot):
             """Try to drop the bot from guild voice channels."""
             logger.info(f"{ctx.author} started leaving.")
             if self.music_handler:
-                self.music_handler.set_not_playing_status()
+                await self.music_handler.set_not_playing_status()
             if self.get_guild_voice_client(ctx):
                 await self.get_guild_voice_client(ctx).disconnect()
             await send_message(ctx, "На созвоне)")
@@ -200,7 +194,7 @@ class MusicBot(Bot):
             source, start_time = parse_play_args(args)
 
             if self.music_handler:
-                self.music_handler.add_to_playlist(source, ctx, start_time)
+                await self.music_handler.add_to_playlist(source, ctx, start_time)
             else:
                 await send_message(ctx, "Can't add to playlist: bot is not in voice channel!", logging.WARNING)
 
@@ -208,7 +202,7 @@ class MusicBot(Bot):
         async def stop(ctx: Context) -> None:
             """Stop music and empty playlist."""
             if self.is_voice_client_here(ctx):
-                self.music_handler.stop(ctx)
+                await self.music_handler.stop(ctx)
             else:
                 await send_message(ctx, "Can't stop playing: bot is not in voice channel with you!", logging.WARNING)
 
@@ -216,7 +210,7 @@ class MusicBot(Bot):
         async def pause(ctx: Context) -> None:
             """Pause music."""
             if self.is_voice_client_here(ctx):
-                self.music_handler.pause(ctx)
+                await self.music_handler.pause(ctx)
             else:
                 await send_message(ctx, "Can't pause playing: bot is not in voice channel with you!", logging.WARNING)
 
@@ -224,7 +218,7 @@ class MusicBot(Bot):
         async def resume(ctx: Context) -> None:
             """Resume music."""
             if self.is_voice_client_here(ctx):
-                self.music_handler.resume(ctx)
+                await self.music_handler.resume(ctx)
             else:
                 await send_message(ctx, "Can't resume playing: bot is not in voice channel with you!", logging.WARNING)
 
@@ -232,7 +226,7 @@ class MusicBot(Bot):
         async def skip(ctx: Context) -> None:
             """Skip music."""
             if self.is_voice_client_here(ctx):
-                self.music_handler.next(ctx)
+                await self.music_handler.next(ctx)
             else:
                 await send_message(ctx, "Can't play next music: bot is not in voice channel with you!", logging.WARNING)
 
@@ -240,36 +234,30 @@ class MusicBot(Bot):
         async def prev(ctx: Context) -> None:
             """Move to the previous music."""
             if self.is_voice_client_here(ctx):
-                self.music_handler.prev(ctx)
+                await self.music_handler.prev(ctx)
             else:
                 await send_message(
-                    ctx,
-                    "Can't play previous music: bot is not in voice channel with you!",
-                    logging.WARNING
+                    ctx, "Can't play previous music: bot is not in voice channel with you!", logging.WARNING
                 )
 
         @self.command()
         async def last(ctx: Context) -> None:
             """Jump on the last track."""
             if self.is_voice_client_here(ctx):
-                self.music_handler.jump(ctx, -1)
+                await self.music_handler.jump(ctx, -1)
             else:
                 await send_message(
-                    ctx,
-                    "Can't play the last music: bot is not in voice channel with you!",
-                    logging.WARNING
+                    ctx, "Can't play the last music: bot is not in voice channel with you!", logging.WARNING
                 )
 
         @self.command()
         async def first(ctx: Context) -> None:
             """Jump on the first track."""
             if self.is_voice_client_here(ctx):
-                self.music_handler.jump(ctx, 0)
+                await self.music_handler.jump(ctx, 0)
             else:
                 await send_message(
-                    ctx,
-                    "Can't play the first music: bot is not in voice channel with you!",
-                    logging.WARNING
+                    ctx, "Can't play the first music: bot is not in voice channel with you!", logging.WARNING
                 )
 
         @self.command(aliases=("q", "очередь"), name="queue")
@@ -292,7 +280,7 @@ class MusicBot(Bot):
                     await send_message(ctx, "Invalid index!", logging.ERROR)
                     return
 
-                self.music_handler.jump(ctx, index)
+                await self.music_handler.jump(ctx, index)
             else:
                 await send_message(ctx, "Can't jump: bot is not in voice channel with you!", logging.WARNING)
 
@@ -308,7 +296,7 @@ class MusicBot(Bot):
                     await send_message(ctx, "Invalid index!", logging.ERROR)
                     return
 
-                self.music_handler.remove(ctx, index)
+                await self.music_handler.remove(ctx, index)
             else:
                 await send_message(ctx, "Can't remove: bot is not in voice channel with you!", logging.WARNING)
 
@@ -316,7 +304,7 @@ class MusicBot(Bot):
         async def shuffle(ctx: Context) -> None:
             """Shuffle queue."""
             if self.is_voice_client_here(ctx):
-                self.music_handler.shuffle(ctx)
+                await self.music_handler.shuffle(ctx)
             else:
                 await send_message(ctx, "Can't shuffle: bot is not in voice channel with you!", logging.WARNING)
 
@@ -324,7 +312,7 @@ class MusicBot(Bot):
         async def now_playing(ctx: Context) -> None:
             """Show current track."""
             if self.music_handler is not None:
-                self.music_handler.now_playing(ctx)
+                await self.music_handler.now_playing(ctx)
             else:
                 await send_message(ctx, "Can't show it: bot is not in voice channel with!", logging.WARNING)
 
@@ -343,7 +331,7 @@ class MusicBot(Bot):
                         return
 
                     value = int(args[0])
-                    self.music_handler.set_music_parameters(ctx, bass_value=value)
+                    await self.music_handler.set_music_parameters(ctx, bass_value=value)
                     await send_message(ctx, f"Bass is setted - {value}")
                 else:
                     await send_message(ctx, "Can't set bass: bot is not in voice channel with you!", logging.WARNING)
@@ -360,7 +348,7 @@ class MusicBot(Bot):
                         return
 
                     value = int(args[0])
-                    self.music_handler.set_music_parameters(ctx, volume_value=value)
+                    await self.music_handler.set_music_parameters(ctx, volume_value=value)
                     await send_message(ctx, f"Volume is setted - {value}")
                 else:
                     await send_message(ctx, "Can't set volume: bot is not in voice channel with you!", logging.WARNING)
@@ -371,17 +359,11 @@ class MusicBot(Bot):
         async def loop(ctx: Context) -> None:
             """Loop/unloop the queue."""
             if self.is_voice_client_here(ctx):
-                self.music_handler.loop(ctx)
+                await self.music_handler.loop(ctx)
             else:
                 await send_message(
-                    ctx,
-                    "Can't loop/unloop queue: bot is not in voice channel with you!", logging.WARNING
+                    ctx, "Can't loop/unloop queue: bot is not in voice channel with you!", logging.WARNING
                 )
-
-        @self.command(aliases=("дефолт", ))
-        async def default(ctx: Context):
-            """Loads tracks from default list."""
-            await self.prepare_and_play(tuple(), ctx, MusicHandler.default)
 
         @self.command(aliases=("нога",))
         async def restart(ctx: Context) -> None:

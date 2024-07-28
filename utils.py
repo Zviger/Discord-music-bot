@@ -33,7 +33,7 @@ async def send_message(ctx: Context, message: str, level: int = logging.INFO):
     await ctx.send(embed=embed)
 
 
-def parse_play_args(args: Tuple[str]) -> Tuple[str, Optional[datetime]]:
+def parse_play_args(args: Tuple[str, ...]) -> Tuple[str, Optional[datetime]]:
     start_time = None
     strings = list(args)
     if len(args) > 1:
@@ -50,4 +50,4 @@ def parse_play_args(args: Tuple[str]) -> Tuple[str, Optional[datetime]]:
 def chunks(lst, n) -> Generator:
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
-        yield lst[i:i + n]
+        yield lst[i: i + n]

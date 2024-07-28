@@ -1,19 +1,17 @@
-import itertools
+import asyncio
 import logging
 import random
 import threading
 import time
-import uuid
 from datetime import timedelta, datetime
 from asyncio import AbstractEventLoop
 from enum import Enum
 from pathlib import Path
 from threading import Thread
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional
 from urllib import parse
 
 import psutil
-import yt_dlp as youtube_dl
 from dateutil import parser
 from discord import (
     PCMVolumeTransformer,
@@ -25,16 +23,18 @@ from discord import (
     Activity,
     ActivityType,
     Message,
-    Emoji
+    Emoji,
 )
 from discord.ext.commands import Context
-import yandex_music
 
 from config import config
+from exceptions import CantDownloadException, BatchDownloadNotAllowed, CantLoadTrackInfoException
 from models import Track
+from music_downloaders.yandex import YandexMusicDownloader
+from music_downloaders.youtube import YouTubeDownloader
+from music_info_loaders.spotify import SpotifyInfoLoader
 from settings import settings
-from spotify import Spotify
-from utils import chunks, SearchDomains
+from utils import SearchDomains
 
 logger = logging.getLogger(settings.app_name)
 
@@ -46,36 +46,6 @@ class PlayerStatus(Enum):
     PLAYING: int = 0
     NOT_PLAYING: int = 1
     PAUSED: int = 2
-
-
-class YtLogger:
-    @staticmethod
-    def debug(msg) -> None:
-        logger.debug(msg)
-
-    @staticmethod
-    def warning(msg) -> None:
-        logger.warning(msg)
-
-    @staticmethod
-    def error(msg) -> None:
-        logger.error(msg)
-
-
-YDL_OPTIONS = {
-    "format": "bestaudio/best",
-    "outtmpl": f"{settings.cached_music_dir}/%(id)s",
-    "ignoreerrors": True,
-    "skip-unavailable-fragments": True,
-    "youtube-skip-dash-manifest": True,
-    "cache-dir": "~/.cache/youtube-dl",
-    "logger": YtLogger,
-    "default_search": "auto",
-    "quiet": True,
-    "no_warnings": True,
-    "source_address": "0.0.0.0",
-    "nopart": True,
-}
 
 
 class MusicHandler:
@@ -91,60 +61,60 @@ class MusicHandler:
         self._show_queue_first_index = 0
         self._show_queue_length = 8
         self._lock = threading.Lock()
-        self._ym_client = yandex_music.Client(token=config.tokens["yandex_music"])
-        self._ydl = youtube_dl.YoutubeDL(YDL_OPTIONS)
-        self._sf_client = Spotify(config.tokens["spotify_client_id"], config.tokens["spotify_client_secret"])
+        self._ym_downloader = YandexMusicDownloader(
+            token=config.tokens["yandex_music"], cache_dir=settings.cached_music_dir
+        )
+        self._yt_downloader = YouTubeDownloader(cache_dir=settings.cached_music_dir)
+        self._spt_info_loader = SpotifyInfoLoader(
+            client_id=config.tokens["spotify_client_id"],
+            client_secret=config.tokens["spotify_client_secret"],
+        )
         self._stream_download_proc = None
         self._stream_file_path = None
 
-    def add_to_playlist(
-            self,
-            source: str,
-            ctx: Context,
-            start_time: Optional[datetime],
-            write_message: bool = True
+    async def add_to_playlist(
+        self,
+        source: str,
+        ctx: Context,
+        start_time: Optional[datetime],
+        write_message: bool = True,
     ):
-        track = self._download(source, ctx, start_time, write_message=write_message)
-        if track is not None:
+        tracks = await self._download(
+            source=source,
+            ctx=ctx,
+            start_time=start_time,
+            write_message=write_message,
+        )
+        if tracks:
             self._lock.acquire()
-            self._add_track_to_queue(track)
+            await self._add_tracks_to_queue(tracks)
             self._lock.release()
 
-    def batch_add_to_playlist(
-            self,
-            sources: List[str],
-            ctx: Context,
+    async def play(
+        self,
+        source: str,
+        ctx: Context,
+        start_time: Optional[datetime],
+        download_message: bool = True,
     ):
-        for source in sources:
-            self.add_to_playlist(source, ctx, None, False)
-
-    def batch_thread_add_to_playlist(
-            self,
-            sources: List[str],
-            ctx: Context
-    ):
-        for chunk in chunks(sources, len(sources) // THREAD_COUNT + 1):
-            thread = Thread(target=self.batch_add_to_playlist, args=(chunk, ctx))
-            thread.start()
-
-    def play(
-            self,
-            source: str,
-            ctx: Context,
-            start_time: Optional[datetime],
-            download_message: bool = True):
-        track = self._download(source, ctx, start_time, download_message)
-        if track is not None:
+        tracks = await self._download(
+            source=source,
+            ctx=ctx,
+            start_time=start_time,
+            write_message=download_message,
+            force_load_first=True,
+        )
+        if tracks:
             self._lock.acquire()
-            self._add_track_to_queue(track)
+            await self._add_tracks_to_queue(tracks)
             self._lock.release()
-            self._try_play(ctx, track)
+            await self._try_play(ctx, tracks[0])
 
-    def set_not_playing_status(self) -> None:
+    async def set_not_playing_status(self) -> None:
         self._status = PlayerStatus.NOT_PLAYING
-        self._set_chill_activity()
+        await self._set_chill_activity()
 
-    def stop(self, ctx: Context):
+    async def stop(self, ctx: Context):
         if self._status in (PlayerStatus.PLAYING, PlayerStatus.PAUSED):
             self._status = PlayerStatus.NOT_PLAYING
             self._voice_client.stop()
@@ -152,67 +122,67 @@ class MusicHandler:
             self._current_queue_track = None
             self._current_im_track = None
             self._show_queue_first_index = 0
-            self._set_chill_activity()
-            self._send_message(ctx, "Stopped!")
+            await self._set_chill_activity()
+            await self._send_message(ctx, "Stopped!")
         elif self._status == PlayerStatus.NOT_PLAYING:
-            self._send_message(ctx, "Bot doesn't play anything!", logging.WARNING)
+            await self._send_message(ctx, "Bot doesn't play anything!", logging.WARNING)
 
-    def pause(self, ctx: Context):
+    async def pause(self, ctx: Context):
         if self._status == PlayerStatus.PLAYING:
             self._status = PlayerStatus.PAUSED
             self._voice_client.pause()
-            self._send_message(ctx, "Paused!")
+            await self._send_message(ctx, "Paused!")
         elif self._status == PlayerStatus.NOT_PLAYING:
-            self._send_message(ctx, "Bot doesn't play anything!", logging.WARNING)
+            await self._send_message(ctx, "Bot doesn't play anything!", logging.WARNING)
         else:
-            self._send_message(ctx, "Bot is already paused!", logging.WARNING)
+            await self._send_message(ctx, "Bot is already paused!", logging.WARNING)
 
-    def resume(self, ctx: Context):
+    async def resume(self, ctx: Context):
         if self._status == PlayerStatus.PLAYING:
-            self._send_message(ctx, "Bot is already resumed!", logging.WARNING)
+            await self._send_message(ctx, "Bot is already resumed!", logging.WARNING)
         elif self._status == PlayerStatus.NOT_PLAYING:
-            self._send_message(ctx, "Bot doesn't play anything!", logging.WARNING)
+            await self._send_message(ctx, "Bot doesn't play anything!", logging.WARNING)
         else:
             self._status = PlayerStatus.PLAYING
             self._voice_client.resume()
-            self._send_message(ctx, "Resumed!")
+            await self._send_message(ctx, "Resumed!")
 
-    def next(self, ctx: Context) -> None:
+    async def next(self, ctx: Context) -> None:
         if track := self._get_next_track():
             self._status = PlayerStatus.NOT_PLAYING
             self._voice_client.stop()
             time.sleep(0.25)
-            self._try_play(ctx, track)
+            await self._try_play(ctx, track)
         else:
-            self._send_message(ctx, f"Can't play next music: end of queue", logging.WARNING)
-            self._set_chill_activity()
+            await self._send_message(ctx, f"Can't play next music: end of queue", logging.WARNING)
+            await self._set_chill_activity()
 
-    def prev(self, ctx: Context) -> None:
+    async def prev(self, ctx: Context) -> None:
         if track := self._get_prev_track():
             self._status = PlayerStatus.NOT_PLAYING
             self._voice_client.stop()
             time.sleep(0.25)
-            self._try_play(ctx, track)
+            await self._try_play(ctx, track)
         else:
-            self._send_message(ctx, f"Can't play prev music: end of queue", logging.WARNING)
-            self._set_chill_activity()
+            await self._send_message(ctx, f"Can't play prev music: end of queue", logging.WARNING)
+            await self._set_chill_activity()
 
-    def jump(self, ctx: Context, index: int) -> None:
+    async def jump(self, ctx: Context, index: int) -> None:
         try:
             self._queue[index]
         except IndexError:
-            self._send_message(ctx, "Invalid index value", logging.ERROR)
+            await self._send_message(ctx, "Invalid index value", logging.ERROR)
             return
 
         self._status = PlayerStatus.NOT_PLAYING
         self._current_im_track = None
         self._voice_client.stop()
         time.sleep(SLEEP_TIME)
-        self._try_play(ctx, self._queue[index])
+        await self._try_play(ctx, self._queue[index])
 
     async def show_queue(self, ctx: Context):
         self._show_queue_first_index = self._get_current_track_position()
-        embed = self._get_show_queue_embed()
+        embed = await self._get_show_queue_embed()
         message: Message
         message = self._show_queue_message = await ctx.send(embed=embed)
 
@@ -223,7 +193,7 @@ class MusicHandler:
             await message.add_reaction(settings.double_arrow_up_small)
             await message.add_reaction(settings.double_arrow_down_small)
 
-    def _get_show_queue_embed(self) -> Embed:
+    async def _get_show_queue_embed(self) -> Embed:
         current_id = self._get_current_track_position()
         embed = Embed(title=f"Queue of {len(self._queue)} tracks")
 
@@ -232,28 +202,29 @@ class MusicHandler:
 
             current_time = current_time.strftime("%H:%M:%S")
             full_time = full_time.strftime("%H:%M:%S")
-            current_track_strings = (f"{track.title} "
-                                     f"[{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]")
+            current_track_strings = (
+                f"{track.title} " f"[{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]"
+            )
             embed.add_field(name="Immediately track", value=f"```css\n{current_track_strings or 'empty'}```")
 
         current_index = self._show_queue_first_index
         if current_index is not None:
-            for i, track in tuple(enumerate(self._queue))[current_index:current_index + self._show_queue_length]:
+            for i, track in tuple(enumerate(self._queue))[current_index : current_index + self._show_queue_length]:
                 if i == current_id and not self._current_im_track and self._current_queue_track:
                     current_time, full_time = self._current_full_time()
                     current_time = current_time.strftime("%H:%M:%S")
                     full_time = full_time.strftime("%H:%M:%S")
                     embed.add_field(
                         name=f"{i + 1}) Current track "
-                             f"[{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]",
+                        f"[{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]",
                         value=f"```css\n{track.title}```",
-                        inline=False
+                        inline=False,
                     )
                 else:
                     embed.add_field(
-                        name=f"{i + 1}) {'STREAM' if track.is_stream else timedelta(seconds=track.length)}",
+                        name=f"{i + 1}) {'STREAM' if track.is_stream else timedelta(seconds=track.duration)}",
                         value=f"```css\n{track.title}```",
-                        inline=False
+                        inline=False,
                     )
 
         embed.colour = Colour.blue()
@@ -285,14 +256,14 @@ class MusicHandler:
             self._show_queue_first_index = self._get_current_track_position()
 
         if old_index != self._show_queue_first_index:
-            embed = self._get_show_queue_embed()
+            embed = await self._get_show_queue_embed()
             await self._show_queue_message.edit(embed=embed)
 
-    def remove(self, ctx: Context, index: int) -> None:
+    async def remove(self, ctx: Context, index: int) -> None:
         try:
             self._queue[index]
         except IndexError:
-            self._send_message(ctx, "Invalid index value", logging.ERROR)
+            await self._send_message(ctx, "Invalid index value", logging.ERROR)
             return
 
         current_id = self._get_current_track_position()
@@ -301,41 +272,41 @@ class MusicHandler:
             self._status = PlayerStatus.NOT_PLAYING
             self._voice_client.stop()
             if track := self._get_next_track(empty_im=False):
-                self._try_play(ctx, track)
+                await self._try_play(ctx, track)
             else:
                 self._current_queue_track = None
-                self._set_chill_activity()
+                await self._set_chill_activity()
             self._queue.pop(index)
         else:
             self._queue.pop(index)
 
-        self._send_message(ctx, f"Track number - {index + 1} is removed!")
+        await self._send_message(ctx, f"Track number - {index + 1} is removed!")
 
-    def shuffle(self, ctx: Context):
+    async def shuffle(self, ctx: Context):
         current_track = self._queue.pop(self._get_current_track_position())
         random.shuffle(self._queue)
         self._queue = [current_track] + self._queue
-        self._send_message(ctx, "Queue is shuffled!")
+        await self._send_message(ctx, "Queue is shuffled!")
 
-    def now_playing(self, ctx: Context):
+    async def now_playing(self, ctx: Context):
         if track := self._current_track:
             current_time, full_time = self._current_full_time()
             current_time = current_time.strftime("%H:%M:%S")
             full_time = full_time.strftime("%H:%M:%S")
-            self._send_message(
-                ctx,
-                f"{track.title} [{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]\n{track.link}"
+            await self._send_message(
+                ctx, f"{track.title} [{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]\n{track.link}"
             )
         else:
-            self._send_message(ctx, f"Nothing is playing")
+            await self._send_message(ctx, f"Nothing is playing")
 
-    def im_play(
-            self,
-            source: str,
-            ctx: Context,
-            start_time: datetime,
+    async def im_play(
+        self,
+        source: str,
+        ctx: Context,
+        start_time: datetime,
     ):
-        track = self._download(source, ctx, start_time, is_im_track=True)
+        tracks = await self._download(source, ctx, start_time, is_im_track=True)
+        track = tracks[0]
 
         if track:
             if self._status == PlayerStatus.PLAYING:
@@ -346,18 +317,18 @@ class MusicHandler:
                     self._current_queue_track.start_time = current_time
                 time.sleep(SLEEP_TIME)
                 self._current_im_track = track
-                self._try_play(ctx, track, is_im_track=True)
+                await self._try_play(ctx, track, is_im_track=True)
             elif self._status == PlayerStatus.NOT_PLAYING:
                 self._current_im_track = track
-                self._try_play(ctx, track, is_im_track=True)
+                await self._try_play(ctx, track, is_im_track=True)
             else:
-                self._send_message(ctx, f"Music shouldn't be paused!", logging.ERROR)
+                await self._send_message(ctx, f"Music shouldn't be paused!", logging.ERROR)
 
-    def set_music_parameters(
-            self,
-            ctx: Context,
-            bass_value: Optional[int] = None,
-            volume_value: Optional[int] = None,
+    async def set_music_parameters(
+        self,
+        ctx: Context,
+        bass_value: Optional[int] = None,
+        volume_value: Optional[int] = None,
     ):
         if bass_value is not None:
             config.bass_value = bass_value
@@ -372,7 +343,7 @@ class MusicHandler:
             self._voice_client.stop()
             time.sleep(SLEEP_TIME)
             self._current_track.start_time = current_time
-            self._try_play(ctx, self._current_track, msg=False, is_im_track=bool(self._current_im_track))
+            await self._try_play(ctx, self._current_track, msg=False, is_im_track=bool(self._current_im_track))
 
         if self._status == PlayerStatus.PAUSED:
             self._status = PlayerStatus.PAUSED
@@ -380,26 +351,15 @@ class MusicHandler:
 
         config.dump_config()
 
-    def loop(self, ctx: Context):
+    async def loop(self, ctx: Context):
         if self._is_loop_queue:
             self._is_loop_queue = False
-            self._send_message(ctx, "Queue is unlooped")
+            await self._send_message(ctx, "Queue is unlooped")
         else:
             self._is_loop_queue = True
-            self._send_message(ctx, "Queue is looped")
+            await self._send_message(ctx, "Queue is looped")
 
-    def default(self, _, ctx: Context, __):
-        with open("default_playlist", "r+") as file:
-            track_urls = file.readlines()
-            random.shuffle(track_urls)
-
-            if len(track_urls) == 1:
-                self.play(track_urls[0].strip(), ctx, None, False)
-
-            if len(track_urls) == 2:
-                self.batch_thread_add_to_playlist(track_urls[1:], ctx)
-
-    def _send_message(self, ctx: Context, message: str, level: int = logging.INFO, not_only_log=True):
+    async def _send_message(self, ctx: Context, message: str, level: int = logging.INFO, not_only_log=True):
         embed = Embed(title=message if len(message) <= 256 else f"{message[:253]}...")
         if level == logging.INFO:
             logger.info(message)
@@ -410,22 +370,25 @@ class MusicHandler:
         elif level == logging.ERROR:
             logger.error(message)
             embed.colour = Colour.red()
-        if not_only_log:
-            self._loop.create_task(ctx.send(embed=embed))
 
-    def _try_play(self, ctx: Context, track: Track, is_im_track: bool = False, msg=True):
+        if not_only_log:
+            await asyncio.create_task(ctx.send(embed=embed))
+
+    async def _try_play(self, ctx: Context, track: Track, is_im_track: bool = False, msg: bool = True):
         if self._status not in (PlayerStatus.PLAYING, PlayerStatus.PAUSED):
+            if track.download_task:
+                await track.download_task
+
             track.im_start_time = track.start_time
             start_time = track.start_time.strftime("%H:%M:%S")
             track.start_time = parser.parse("00:00:00")
 
             if track.is_stream:
-                Thread(target=self._ydl.download, args=(track.link,)).start()
+                Thread(target=self._yt_downloader._client.download, args=(track.link,)).start()
                 time_sleep = 5
                 if track.is_twitch:
                     time_sleep = 30
                 time.sleep(time_sleep)
-
 
                 self._stream_download_proc = [
                     proc for proc in psutil.process_iter() if proc.name().startswith("ffmpeg")
@@ -434,11 +397,8 @@ class MusicHandler:
 
                 self._voice_client.play(
                     PCMVolumeTransformer(
-                        FFmpegPCMAudio(
-                            str(self._stream_file_path),
-                            options=f"-af bass=g={config.bass_value}"
-                        ),
-                        volume=config.volume_value / 100
+                        FFmpegPCMAudio(str(self._stream_file_path), options=f"-af bass=g={config.bass_value}"),
+                        volume=config.volume_value / 100,
                     ),
                     after=self._on_music_end(ctx),
                 )
@@ -448,9 +408,9 @@ class MusicHandler:
                         FFmpegPCMAudio(
                             str(Path(settings.cached_music_dir).joinpath(track.id)),
                             before_options=f"-ss {start_time}",
-                            options=f"-af bass=g={config.bass_value}"
+                            options=f"-af bass=g={config.bass_value}",
                         ),
-                        volume=config.volume_value / 100
+                        volume=config.volume_value / 100,
                     ),
                     after=self._on_music_end(ctx),
                 )
@@ -460,27 +420,24 @@ class MusicHandler:
                 self._current_im_track = track
             else:
                 self._current_queue_track = track
+
             if msg:
-                self._send_message(
+                await self._send_message(
                     ctx,
                     f"Now is playing - {track.title} ["
-                    f"{'STREAM' if track.is_stream else f'{start_time} - {timedelta(seconds=track.length)}'}"
-                    f"]\nLink - {track.link}"
+                    f"{'STREAM' if track.is_stream else f'{start_time} - {timedelta(seconds=track.duration)}'}"
+                    f"]\nLink - {track.link}",
                 )
-            self._loop.create_task(
-                self._voice_client.client.change_presence(
-                    status=Status.online, activity=Activity(name=track.title, type=ActivityType.listening)
-                )
+            await self._voice_client.client.change_presence(
+                status=Status.online, activity=Activity(name=track.title, type=ActivityType.listening)
             )
 
-    def _set_chill_activity(self) -> None:
-        self._loop.create_task(
-            self._voice_client.client.change_presence(
-                status=Status.online, activity=Activity(
-                    name="Не могу стоять пока другие работают... пойду полежу",
-                    type=ActivityType.watching
-                )
-            )
+    async def _set_chill_activity(self) -> None:
+        await self._voice_client.client.change_presence(
+            status=Status.online,
+            activity=Activity(
+                name="Не могу стоять пока другие работают... пойду полежу", type=ActivityType.watching
+            ),
         )
 
     def _on_music_end(self, ctx: Context):
@@ -496,9 +453,9 @@ class MusicHandler:
                 if self._status in (PlayerStatus.PLAYING, PlayerStatus.PAUSED):
                     self._status = PlayerStatus.NOT_PLAYING
                     if track := self._get_next_track():
-                        self._try_play(ctx, track)
+                        self._loop.create_task(self._try_play(ctx, track))
                     else:
-                        self._set_chill_activity()
+                        self._loop.create_task(self._set_chill_activity())
                         self._current_queue_track = None
                         self._current_im_track = None
 
@@ -509,189 +466,69 @@ class MusicHandler:
         a_timedelta = track.im_start_time - parser.parse("00:00:00")
         seconds = a_timedelta.total_seconds()
         current_time = timedelta(seconds=self._voice_client._player.loops * 0.02 + seconds) + parser.parse("00:00:00")
-        full_time = timedelta(seconds=track.length) + parser.parse("00:00:00")
+        full_time = timedelta(seconds=track.duration) + parser.parse("00:00:00")
 
         return current_time, full_time
 
-    def _add_track_to_queue(self, track: Track) -> None:
-        self._queue.append(track)
+    async def _add_tracks_to_queue(self, tracks: list[Track]) -> None:
+        self._queue.extend(tracks)
 
-    def _download(
-            self,
-            source: str,
-            ctx: Context,
-            start_time: Optional[datetime] = None,
-            write_message: bool = True,
-            is_im_track: bool = False
-    ) -> Optional[Track]:
+    async def _download(
+        self,
+        source: str,
+        ctx: Context,
+        start_time: Optional[datetime] = None,
+        write_message: bool = True,
+        is_im_track: bool = False,
+        force_load_first: bool = False,
+    ) -> list[Track]:
         parsed_url = parse.urlparse(source)
         netloc = parsed_url.netloc
 
-        if netloc.startswith(SearchDomains.yandex_music):
-            path_args = parsed_url.path.strip("/").split("/")
-
-            if len(path_args) == 2 and path_args[0] == "album" and path_args[1].isnumeric():
-                if is_im_track:
-                    self._send_message(ctx, "Can't play more then one track immediately")
-                    return
-
-                tracks = list(itertools.chain(*self._ym_client.albums_with_tracks(int(path_args[1])).volumes))
-                track = tracks[0]
-                self._download_ym_track(track)
-                self.batch_thread_add_to_playlist(
-                    [
-                        f"https://music.yandex.by/album/{(ids := t.track_id.split(':'))[1]}/track/{ids[0]}"
-                        for t in tracks[1:]
-                    ],
-                    ctx
+        try:
+            if netloc.startswith(SearchDomains.yandex_music):
+                tracks = await self._ym_downloader.download(
+                    source=source,
+                    batch_download_allowed=not is_im_track,
+                    force_load_first=force_load_first,
                 )
-            elif (
-                    len(path_args) == 4
-                    and path_args[0] == "users"
-                    and path_args[2] == "playlists"
-                    and path_args[3].isnumeric()
-            ):
-                if is_im_track:
-                    self._send_message(ctx, "Can't play more then one track immediately")
-                    return
-                user_login, playlist_id = path_args[1], int(path_args[3])
-                tracks = self._ym_client.users_playlists(playlist_id, user_login).tracks
-                track = tracks[0].track
-                self._download_ym_track(track)
-                ym_tracks_links = []
-                for t in tracks[1:]:
-                    ids = t.track.track_id.split(':')
-                    if len(ids) > 1:
-                        ym_tracks_links.append(f"https://music.yandex.by/album/{ids[1]}/track/{ids[0]}")
-                self.batch_thread_add_to_playlist(ym_tracks_links, ctx)
-            elif (
-                    len(path_args) == 4
-                    and path_args[0] == "album"
-                    and path_args[1].isnumeric()
-                    and path_args[2] == "track"
-                    and path_args[3].isnumeric()
-            ):
-                track = self._ym_client.tracks(f"{path_args[3]}:{path_args[1]}")[0]
-                self._download_ym_track(track)
+            elif netloc.startswith(SearchDomains.spotify):
+                track_names = await self._spt_info_loader.get_track_names(source=source)
+
+                if is_im_track and len(track_names) > 1:
+                    raise BatchDownloadNotAllowed
+
+                tracks = await self._yt_downloader.batch_download_by_track_names(
+                    track_names=track_names,
+                    force_load_first=force_load_first,
+                )
             else:
-                if write_message:
-                    self._send_message(ctx, f"Cant download yandex music", logging.ERROR)
-                return None
-
-            track = Track(
-                id=track.track_id,
-                title=track.title,
-                link=source,
-                length=track.duration_ms // 1000,
-                uuid=uuid.uuid4(),
-            )
-        elif netloc.startswith(SearchDomains.spotify):
-            path_args = parsed_url.path.split("/")
-
-            if "track" in path_args:
-                response = self._sf_client.get_track(path_args[-1])
-                track_name = f"{response['artists'][0]['name']} {response['name']}"
-
-                return self._download(track_name, ctx, start_time, write_message)
-            elif "album" in path_args:
-                if is_im_track:
-                    self._send_message(ctx, "Can't play more then one track immediately")
-                    return
-
-                response = self._sf_client.get_album(path_args[-1])
-                track_names = [f"{i['name']} {i['artists'][0]['name']}" for i in response["tracks"]["items"]]
-                result = self._download(track_names[0], ctx, start_time, write_message)
-                self.batch_thread_add_to_playlist(track_names[1:], ctx)
-
-                return result
-            elif "playlist" in path_args:
-                if is_im_track:
-                    self._send_message(ctx, "Can't play more then one track immediately")
-                    return
-
-                tracks = []
-                response = self._sf_client.get_playlist_tracks(path_args[-1])
-                while True:
-                    tracks.extend(response["items"])
-                    if response["next"] is not None:
-                        response = self._sf_client.make_spotify_req(response["next"])
-                        continue
-                    else:
-                        break
-
-                track_names = [f"{i['track']['name']} {i['track']['artists'][0]['name']}" for i in tracks]
-                result = self._download(track_names[0], ctx, start_time, write_message)
-                self.batch_thread_add_to_playlist(track_names[1:], ctx)
-
-                return result
-            else:
-                if write_message:
-                    self._send_message(ctx, f"Cant download spotify music", logging.ERROR)
-                return None
-        elif (track_info := self._ydl.extract_info(source, download=False)).get("is_live"):
-            track = Track(
-                id=track_info["id"],
-                title=track_info["title"].strip(),
-                link=track_info["original_url"].strip(),
-                length=0,
-                is_stream=True,
-                is_twitch="twitch" in track_info["webpage_url_domain"],
-                uuid=uuid.uuid4(),
-            )
-        elif (
-                netloc.startswith(SearchDomains.youtube)
-                or netloc.startswith(SearchDomains.youtube_short)
-                or not netloc
-        ):
-            if not netloc:
-                entries = track_info["entries"]
-                if entries:
-                    track_info = entries[0]
-                    self._ydl.download(track_info["original_url"])
-                else:
-                    if write_message:
-                        self._send_message(ctx, f"Cant download youtube music {source}", logging.ERROR)
-                    return None
-            elif entries := track_info.get("entries"):
-                if is_im_track:
-                    self._send_message(ctx, "Can't play more then one track immediately")
-                    return
-
-                write_message = False
-                start_time = None
-                track_info = entries[0]
-                self._ydl.download(track_info["original_url"])
-                self.batch_thread_add_to_playlist([entry["original_url"] for entry in entries[1:] if entry], ctx)
-            else:
-                self._ydl.download(track_info["original_url"])
-
-            track = Track(
-                id=track_info["id"],
-                title=track_info["title"].strip(),
-                link=track_info["original_url"].strip(),
-                length=track_info["duration"],
-                uuid=uuid.uuid4(),
-            )
-        else:
+                tracks = await self._yt_downloader.download(
+                    source=source,
+                    batch_download_allowed=not is_im_track,
+                    force_load_first=force_load_first,
+                )
+        except (CantDownloadException, CantLoadTrackInfoException) as e:
             if write_message:
-                self._send_message(ctx, f"Cant download music", logging.ERROR)
-            return None
+                await self._send_message(ctx, str(e), logging.ERROR)
 
-        if start_time:
-            track.start_time = start_time
+            return []
+        except BatchDownloadNotAllowed:
+            if write_message:
+                await self._send_message(ctx, "Can't play more then one track immediately")
 
-        if write_message:
-            if track.is_stream:
-                self._send_message(ctx, f"Stream is ready - {track.title}")
-            else:
-                self._send_message(ctx, f"Downloaded music - {track.title}")
+            return []
+        except Exception as e:
+            if write_message:
+                await self._send_message(ctx, "Looks like some bug happened, so, can't download music")
+            logger.exception("Some error occurred", exc_info=e)
+        else:
+            first_track = tracks[0]
 
-        return track
+            if start_time:
+                first_track.start_time = start_time
 
-    @staticmethod
-    def _download_ym_track(track: yandex_music.Track):
-        if not (filepath := Path(settings.cached_music_dir).joinpath(track.track_id)).exists():
-            track.download(str(filepath), codec="aac", bitrate_in_kbps=128)
+            return tracks
 
     @property
     def _current_track(self) -> Track:
