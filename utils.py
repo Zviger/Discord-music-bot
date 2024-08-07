@@ -20,7 +20,7 @@ class SearchDomains(str, Enum):
 
 
 async def send_message(ctx: Context, message: str, level: int = logging.INFO):
-    embed = Embed(title=message)
+    embed = Embed(title=message if len(message) <= 256 else f"{message[:253]}...")
     if level == logging.INFO:
         logger.info(message)
         embed.colour = Colour.blue()

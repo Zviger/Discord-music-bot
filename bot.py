@@ -86,7 +86,7 @@ class MusicBot(Bot):
                 content="Все сюдаааааааааааааа!", tts=True, file=File("images/vse_suda.jpg"), delete_after=1006
             )
         else:
-            await Bot.on_message(self, message)
+            await super().on_message(message)
 
     async def on_voice_state_update(self, member: Union[Member, User], before: VoiceState, _: VoiceState) -> None:
         if before.channel is None:
@@ -121,11 +121,9 @@ class MusicBot(Bot):
         async def prepare_and_play(args: Tuple[str, ...], ctx: Context, play_method: callable):
             source, start_time = parse_play_args(args)
             voice_client = self.get_guild_voice_client(ctx)
-            if not voice_client:
+            if not voice_client or not voice_client.is_connected():
                 try:
                     await wait_for(summon(ctx, False), 10)
-                    if not self.music_handler:
-                        return
                 except TimeoutError:
                     await send_message(ctx, "Bot summon timeout error.", logging.ERROR)
                     return

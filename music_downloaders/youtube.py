@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import uuid
-from asyncio import Future
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
@@ -65,7 +64,7 @@ class YouTubeDownloader(MusicDownloader):
 
         source_info = self._client.extract_info(source, download=False, process=False)
 
-        if 'youtube' in source_info['extractor']:
+        if 'youtube' in source_info['extractor'] and source_info.get("live_status") != "is_live":
             if entries := source_info.get("entries"):
                 if not batch_download_allowed:
                     raise BatchDownloadNotAllowed
