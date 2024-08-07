@@ -528,6 +528,9 @@ class MusicHandler:
             if start_time:
                 first_track.start_time = start_time
 
+            if write_message:
+                await self._send_message(ctx, f"Downloaded {len(tracks)} by source {source}")
+
             return tracks
 
     @property

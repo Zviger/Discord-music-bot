@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     command_prefix: str = "-"
     app_name: str = "Music Bot"
-    cached_music_dir: str = "cached_music"
+    cached_music_dir: str = "./cached_music"
     config_file: str = "config.ini"
     arrow_up_small: str = "⬆️"
     arrow_down_small: str = "🔽"

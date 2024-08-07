@@ -1,11 +1,11 @@
 import logging
-import os
 import shutil
 from asyncio import wait_for
 from datetime import datetime
 from pathlib import Path
 from typing import Union, Optional, Tuple, Callable
 
+import psutil
 from discord import (
     User,
     Member,
@@ -380,16 +380,16 @@ class MusicBot(Bot):
         @self.command()
         async def sys_info(ctx: Context) -> None:
             """Shows system information."""
-            st = os.statvfs(".")
-            free_space = int(st.f_bavail * st.f_frsize / 1024 / 1024)
-            free_memory = int(os.popen("free -t -m").readlines()[-1].split()[3])
+            free_space = int(psutil.disk_usage('/').free / 1024 / 1024)
+            free_memory = int(psutil.virtual_memory().free / 1024 / 1024)
 
             await send_message(ctx, f"Free space - {free_space}mb\nFree memory - {free_memory}mb")
 
         @self.command()
         async def free_cache(ctx: Context) -> None:
             """removes cached tracks."""
-            shutil.rmtree(settings.cached_music_dir)
+            for filename in Path(settings.cached_music_dir).iterdir():
+                filename.unlink()
             await send_message(ctx, "Cached tracks are removed")
 
         return prepare_and_play
