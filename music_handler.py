@@ -47,14 +47,14 @@ class MusicHandler:
     def __init__(self, voice_client, loop: AbstractEventLoop):
         self._voice_client: VoiceClient = voice_client
         self._loop: AbstractEventLoop = loop
-        self._queue = []
+        self._queue: list = []
         self._current_queue_track: Optional[Track] = None
         self._current_im_track: Optional[Track] = None
         self._status = PlayerStatus.NOT_PLAYING
         self._is_loop_queue: bool = False
         self._show_queue_message: Optional[Message] = None
-        self._show_queue_first_index = 0
-        self._show_queue_length = 8
+        self._show_queue_first_index: int = 0
+        self._show_queue_length: int = 8
         self._ym_downloader = YandexMusicDownloader(
             token=config.tokens["yandex_music"], cache_dir=settings.cached_music_dir
         )

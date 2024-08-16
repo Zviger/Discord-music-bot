@@ -8,3 +8,4 @@ discord.py[voice]
 PyNaCl
 psutil
 crontab
+aiohttp
