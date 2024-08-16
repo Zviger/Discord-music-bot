@@ -82,8 +82,7 @@ class YouTubeDownloader(MusicDownloader):
                         title=source_info["title"].strip(),
                         link=source_info["original_url"].strip(),
                         duration=0,
-                        is_stream=True,
-                        is_twitch="twitch" in source_info["webpage_url_domain"],
+                        stram_link=source_info['url'],
                         uuid=uuid.uuid4(),
                     )
                 )

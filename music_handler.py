@@ -5,11 +5,9 @@ from datetime import timedelta, datetime
 from asyncio import AbstractEventLoop
 from enum import Enum
 from pathlib import Path
-from threading import Thread
 from typing import Tuple, Optional
 from urllib import parse
 
-import psutil
 from dateutil import parser
 from discord import (
     PCMVolumeTransformer,
@@ -65,8 +63,6 @@ class MusicHandler:
             client_id=config.tokens["spotify_client_id"],
             client_secret=config.tokens["spotify_client_secret"],
         )
-        self._stream_download_proc = None
-        self._stream_file_path = None
 
     async def add_to_playlist(
         self,
@@ -189,7 +185,7 @@ class MusicHandler:
             current_time = current_time.strftime("%H:%M:%S")
             full_time = full_time.strftime("%H:%M:%S")
             current_track_strings = (
-                f"{track.title} " f"[{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]"
+                f"{track.title} " f"[{'STREAM' if track.stram_link else f'{current_time} - {full_time}'}]"
             )
             embed.add_field(name="Immediately track", value=f"```css\n{current_track_strings or 'empty'}```")
 
@@ -202,13 +198,13 @@ class MusicHandler:
                     full_time = full_time.strftime("%H:%M:%S")
                     embed.add_field(
                         name=f"{i + 1}) Current track "
-                        f"[{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]",
+                        f"[{'STREAM' if track.stram_link else f'{current_time} - {full_time}'}]",
                         value=f"```css\n{track.title}```",
                         inline=False,
                     )
                 else:
                     embed.add_field(
-                        name=f"{i + 1}) {'STREAM' if track.is_stream else timedelta(seconds=track.duration)}",
+                        name=f"{i + 1}) {'STREAM' if track.stram_link else timedelta(seconds=track.duration)}",
                         value=f"```css\n{track.title}```",
                         inline=False,
                     )
@@ -279,7 +275,7 @@ class MusicHandler:
             current_time = current_time.strftime("%H:%M:%S")
             full_time = full_time.strftime("%H:%M:%S")
             await self._send_message(
-                ctx, f"{track.title} [{'STREAM' if track.is_stream else f'{current_time} - {full_time}'}]\n{track.link}"
+                ctx, f"{track.title} [{'STREAM' if track.stram_link else f'{current_time} - {full_time}'}]\n{track.link}"
             )
         else:
             await self._send_message(ctx, f"Nothing is playing")
@@ -354,21 +350,10 @@ class MusicHandler:
             start_time = track.start_time.strftime("%H:%M:%S")
             track.start_time = parser.parse("00:00:00")
 
-            if track.is_stream:
-                Thread(target=self._yt_downloader._client.download, args=(track.link,)).start()
-                time_sleep = 5
-                if track.is_twitch:
-                    time_sleep = 30
-                await asyncio.sleep(time_sleep)
-
-                self._stream_download_proc = [
-                    proc for proc in psutil.process_iter() if proc.name().startswith("ffmpeg")
-                ][-1]
-                self._stream_file_path = Path(settings.cached_music_dir).joinpath(track.id)
-
+            if track.stram_link:
                 self._voice_client.play(
                     PCMVolumeTransformer(
-                        FFmpegPCMAudio(str(self._stream_file_path), options=f"-af bass=g={config.bass_value} -loglevel debug"),
+                        FFmpegPCMAudio(source=track.stram_link, options=f"-af bass=g={config.bass_value} -loglevel debug"),
                         volume=config.volume_value / 100,
                     ),
                     after=self._on_music_end(ctx),
@@ -396,7 +381,7 @@ class MusicHandler:
                 await self._send_message(
                     ctx,
                     f"Now is playing - {track.title} ["
-                    f"{'STREAM' if track.is_stream else f'{start_time} - {timedelta(seconds=track.duration)}'}"
+                    f"{'STREAM' if track.stram_link else f'{start_time} - {timedelta(seconds=track.duration)}'}"
                     f"]\nLink - {track.link}",
                 )
             await self._voice_client.client.change_presence(
@@ -413,11 +398,6 @@ class MusicHandler:
 
     def _on_music_end(self, ctx: Context):
         def on_music_end(error) -> None:
-            if self._stream_download_proc is not None:
-                self._stream_download_proc.kill()
-                self._stream_download_proc = None
-                self._stream_file_path.unlink()
-
             if error:
                 logger.error(error)
             else:
