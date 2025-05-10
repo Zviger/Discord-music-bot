@@ -65,7 +65,7 @@ class YandexMusicDownloader(MusicDownloader):
         download_task = None
 
         if not (filepath := Path(self._cache_dir).joinpath(track.track_id)).exists():
-            download_task = asyncio.create_task(track.downloadAsync(str(filepath), codec="aac", bitrate_in_kbps=128))
+            download_task = asyncio.create_task(track.downloadAsync(str(filepath), codec="aac", bitrate_in_kbps=192))
             if force_load:
                 await download_task
 
