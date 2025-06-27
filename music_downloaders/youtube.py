@@ -3,6 +3,7 @@ import logging
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
+from pathlib import Path
 
 from exceptions import CantDownloadException, BatchDownloadNotAllowed
 from models import Track
@@ -43,7 +44,7 @@ class YouTubeDownloader(MusicDownloader):
             params={
                 "format": "bestaudio/best",
                 "outtmpl": f"{cache_dir}/%(id)s",
-                "ignoreerrors": True,
+                # "ignoreerrors": True,
                 "skip-unavailable-fragments": True,
                 "youtube-skip-dash-manifest": True,
                 "cache-dir": "~/.cache/youtube-dl",
@@ -107,7 +108,8 @@ class YouTubeDownloader(MusicDownloader):
         return tracks
 
     async def _download(self, source_info: dict) -> Track:
-        self._client.download(source_info["original_url"])
+        if not Path(f'{self._cache_dir}/{source_info["id"]}').exists():
+            self._client.download(source_info["original_url"])
 
         return Track(
             id=source_info["id"],
