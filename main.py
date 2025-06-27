@@ -3,9 +3,9 @@ import logging
 
 import discord
 
+from bot import MusicBot
 from config import config
 from settings import settings
-from bot import MusicBot
 
 logger = logging.getLogger(settings.app_name)
 
