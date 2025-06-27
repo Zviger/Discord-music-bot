@@ -130,6 +130,7 @@ dmypy.json
 
 # IDE
 .idea
+.vscode
 
 # bot files
 cached_music

@@ -1,0 +1,6 @@
+services:
+  discordmusicbot:
+    image: discordmusicbot
+    build:
+      context: .
+      dockerfile: ./Dockerfile
