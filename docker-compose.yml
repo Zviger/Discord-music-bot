@@ -4,3 +4,7 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
+    volumes:
+      - ./cached_music:/app/cached_music
+      - ./config.ini:/app/config.ini
+      - ./images:/app/images
