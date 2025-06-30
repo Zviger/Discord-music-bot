@@ -1,10 +1,9 @@
-from typing import Any
-
-import aiohttp
-
 import base64
 import logging
 import time
+from typing import Any
+
+import aiohttp
 
 from settings import settings
 
@@ -41,7 +40,7 @@ class SpotifyMusicClient:
         return await self.make_request(url, headers={"Authorization": f"Bearer {token}"})
 
     @staticmethod
-    async def make_request(url: str, method: str = 'GET', data: Any = None, headers: dict = None) -> dict:
+    async def make_request(url: str, method: str = "GET", data: Any = None, headers: dict = None) -> dict:
         async with aiohttp.request(url=url, method=method, data=data, headers=headers) as r:
             if r.status != 200:
                 raise SpotifyError(f"Issue making POST request to {url}: [{r.status}] {r.json()}")
@@ -51,7 +50,7 @@ class SpotifyMusicClient:
     @staticmethod
     def _make_token_auth(client_id: str, client_secret: str) -> dict:
         auth_header = base64.b64encode((client_id + ":" + client_secret).encode("ascii"))
-        return {"Authorization": "Basic %s" % auth_header.decode("ascii")}
+        return {"Authorization": "Basic {}".format(auth_header.decode("ascii"))}
 
     async def get_token(self) -> str:
         if self.token and not self.check_token(self.token):
@@ -73,6 +72,5 @@ class SpotifyMusicClient:
     async def request_token(self) -> dict:
         payload = {"grant_type": "client_credentials"}
         headers = self._make_token_auth(self.client_id, self.client_secret)
-        r = await self.make_request(self.OAUTH_TOKEN_URL, method='POST', data=payload, headers=headers)
+        return await self.make_request(self.OAUTH_TOKEN_URL, method="POST", data=payload, headers=headers)
 
-        return r

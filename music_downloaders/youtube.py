@@ -5,11 +5,11 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
 
-from exceptions import CantDownloadException, BatchDownloadNotAllowed
-from models import Track
-from music_downloaders.base import MusicDownloader
 import yt_dlp as youtube_dl
 
+from exceptions import BatchDownloadNotAllowed, CantDownloadException
+from models import Track
+from music_downloaders.base import MusicDownloader
 from utils import chunks
 
 logger = logging.getLogger(__name__)
@@ -53,19 +53,22 @@ class YouTubeDownloader(MusicDownloader):
                 "quiet": True,
                 "no_warnings": True,
                 "nopart": True,
-            }
+            },
         )
         self._download_thread_count = 8
         self._cache_dir = cache_dir
 
     async def download(
-        self, source: str, batch_download_allowed: bool = True, force_load_first: bool = False
+        self,
+        source: str,
+        batch_download_allowed: bool = True,
+        force_load_first: bool = False,
     ) -> list[Track]:
         tracks = []
 
         source_info = self._client.extract_info(source, download=False, process=False)
 
-        if 'youtu' in source_info['extractor'] and source_info.get("live_status") != "is_live":
+        if "youtu" in source_info["extractor"] and source_info.get("live_status") != "is_live":
             if entries := source_info.get("entries"):
                 if not batch_download_allowed:
                     raise BatchDownloadNotAllowed
@@ -83,12 +86,12 @@ class YouTubeDownloader(MusicDownloader):
                         title=source_info["title"].strip(),
                         link=source_info["original_url"].strip(),
                         duration=0,
-                        stram_link=source_info['url'],
+                        stram_link=source_info["url"],
                         uuid=uuid.uuid4(),
-                    )
+                    ),
                 )
             else:
-                tracks.append(await self._download(source_info['entries'][0]))
+                tracks.append(await self._download(source_info["entries"][0]))
 
         if not tracks:
             raise CantDownloadException("Can't download music by this source")
@@ -96,19 +99,19 @@ class YouTubeDownloader(MusicDownloader):
         return tracks
 
     async def batch_download_by_track_names(
-        self, track_names: list[str], force_load_first: bool = False
+        self,
+        track_names: list[str],
+        force_load_first: bool = False,
     ) -> list[Track]:
         source_infos = []
         for track_name in track_names:
             source_info = self._client.extract_info(track_name, download=False)
             source_infos.append(source_info["entries"][0])
 
-        tracks = await self._batch_download(source_infos=source_infos, force_load_first=force_load_first)
-
-        return tracks
+        return await self._batch_download(source_infos=source_infos, force_load_first=force_load_first)
 
     async def _download(self, source_info: dict) -> Track:
-        if not Path(f'{self._cache_dir}/{source_info["id"]}').exists():
+        if not Path(f"{self._cache_dir}/{source_info['id']}").exists():
             self._client.download(source_info["original_url"])
 
         return Track(
@@ -134,14 +137,15 @@ class YouTubeDownloader(MusicDownloader):
                         link=url.strip(),
                         duration=source_info["duration"],
                         uuid=uuid.uuid4(),
-                    )
+                    ),
                 )
 
             source_infos = source_infos[2:]
 
         for chunk in chunks(source_infos, len(source_infos) // self._download_thread_count + 1):
             download_task = executor(
-                self.__batch_sync_download, urls=map(lambda i: i.get("webpage_url") or i["url"], chunk)
+                self.__batch_sync_download,
+                urls=map(lambda i: i.get("webpage_url") or i["url"], chunk),
             )
             for source_info in chunk:
                 url = source_info.get("webpage_url") or source_info["url"]
@@ -153,7 +157,7 @@ class YouTubeDownloader(MusicDownloader):
                         duration=source_info["duration"],
                         uuid=uuid.uuid4(),
                         download_task=download_task,
-                    )
+                    ),
                 )
 
         return tracks

@@ -7,7 +7,7 @@ from urllib import parse
 import yandex_music
 from yandex_music.utils.request_async import Request
 
-from exceptions import CantDownloadException, BatchDownloadNotAllowed
+from exceptions import BatchDownloadNotAllowed, CantDownloadException
 from models import Track
 from music_downloaders.base import MusicDownloader
 
@@ -20,7 +20,10 @@ class YandexMusicDownloader(MusicDownloader):
         self._cache_dir = cache_dir
 
     async def download(
-        self, source: str, batch_download_allowed: bool = True, force_load_first: bool = False
+        self,
+        source: str,
+        batch_download_allowed: bool = True,
+        force_load_first: bool = False,
     ) -> list[Track]:
         parsed_url = parse.urlparse(source)
         path_args = parsed_url.path.strip("/").split("/")

@@ -176,7 +176,8 @@ class MusicBot(Bot):
 
             if voice_client := self.get_guild_voice_client(ctx):
                 if not voice_client.is_connected():
-                    await voice_client.channel.connect()
+                    await voice_client.disconnect(force=True)
+                    await voice_client.channel.connect(timeout=60, reconnect=True)
                 if move and not self.is_voice_client_here(ctx):
                         await voice_client.move_to(author_voice_channel)
             else:
