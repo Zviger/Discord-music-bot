@@ -21,5 +21,5 @@ class Track:
     uuid: UUID
     start_time: datetime.datetime = parser.parse("00:00:00")
     im_start_time: datetime.datetime = parser.parse("00:00:00")
-    stram_link: str | None = None
+    stream_link: str | None = None
     download_task: Future | None = None

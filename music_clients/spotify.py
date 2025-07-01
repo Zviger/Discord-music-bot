@@ -21,7 +21,7 @@ class SpotifyMusicClient:
     def __init__(self, client_id: str, client_secret: str) -> None:
         self.client_id = client_id
         self.client_secret = client_secret
-        self.token = None
+        self.token: dict | None = None
 
     async def get_track(self, uri: str) -> dict:
         return await self.make_spotify_req(self.API_BASE + f"tracks/{uri}")
@@ -40,7 +40,7 @@ class SpotifyMusicClient:
         return await self.make_request(url, headers={"Authorization": f"Bearer {token}"})
 
     @staticmethod
-    async def make_request(url: str, method: str = "GET", data: Any = None, headers: dict = None) -> dict:
+    async def make_request(url: str, method: str = "GET", data: Any = None, headers: dict | None = None) -> dict:
         async with aiohttp.request(url=url, method=method, data=data, headers=headers) as r:
             if r.status != 200:
                 raise SpotifyError(f"Issue making POST request to {url}: [{r.status}] {r.json()}")

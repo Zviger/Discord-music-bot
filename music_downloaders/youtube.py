@@ -68,7 +68,11 @@ class YouTubeDownloader(MusicDownloader):
 
         source_info = self._client.extract_info(source, download=False, process=False)
 
-        if "youtu" in source_info["extractor"] and source_info.get("live_status") != "is_live":
+        if (
+            source_info is not None
+            and "youtu" in source_info["extractor"]
+            and source_info.get("live_status") != "is_live"
+        ):
             if entries := source_info.get("entries"):
                 if not batch_download_allowed:
                     raise BatchDownloadNotAllowed
@@ -79,19 +83,21 @@ class YouTubeDownloader(MusicDownloader):
                 tracks.append(await self._download(source_info))
         else:
             source_info = self._client.extract_info(source, download=False)
-            if source_info.get("is_live"):
-                tracks.append(
-                    Track(
-                        id=source_info["id"],
-                        title=source_info["title"].strip(),
-                        link=source_info["original_url"].strip(),
-                        duration=0,
-                        stram_link=source_info["url"],
-                        uuid=uuid.uuid4(),
-                    ),
-                )
-            else:
-                tracks.append(await self._download(source_info["entries"][0]))
+
+            if source_info is not None:
+                if source_info.get("is_live"):
+                    tracks.append(
+                        Track(
+                            id=source_info["id"],
+                            title=source_info["title"].strip(),
+                            link=source_info["original_url"].strip(),
+                            duration=0,
+                            stream_link=source_info["url"],
+                            uuid=uuid.uuid4(),
+                        ),
+                    )
+                else:
+                    tracks.append(await self._download(source_info["entries"][0]))
 
         if not tracks:
             raise CantDownloadException("Can't download music by this source")
@@ -106,7 +112,9 @@ class YouTubeDownloader(MusicDownloader):
         source_infos = []
         for track_name in track_names:
             source_info = self._client.extract_info(track_name, download=False)
-            source_infos.append(source_info["entries"][0])
+
+            if source_info is not None:
+                source_infos.append(source_info["entries"][0])
 
         return await self._batch_download(source_infos=source_infos, force_load_first=force_load_first)
 

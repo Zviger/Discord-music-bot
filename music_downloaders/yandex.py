@@ -28,16 +28,19 @@ class YandexMusicDownloader(MusicDownloader):
         parsed_url = parse.urlparse(source)
         path_args = parsed_url.path.strip("/").split("/")
         tracks = []
+        ym_tracks = []
 
         if len(path_args) == 2 and path_args[0] == "album" and path_args[1].isnumeric():
             album = await self._client.albums_with_tracks(int(path_args[1]))
-            ym_tracks = itertools.chain(*album.volumes)
+
+            if album is not None and album.volumes is not None:
+                ym_tracks = list(itertools.chain(*album.volumes))
         elif (
             len(path_args) == 4 and path_args[0] == "users" and path_args[2] == "playlists" and path_args[3].isnumeric()
         ):
             user_login, playlist_id = path_args[1], int(path_args[3])
-            playslist = await self._client.users_playlists(playlist_id, user_login)
-            ym_tracks = []
+            playslists = await self._client.users_playlists(playlist_id, user_login)
+            playslist = playslists[0] if isinstance(playslists, list) else playslists
             for ym_track_short in playslist.tracks:
                 ym_tracks.append(await ym_track_short.fetch_track_async())
         elif (
@@ -76,9 +79,9 @@ class YandexMusicDownloader(MusicDownloader):
 
         return Track(
             id=track.track_id,
-            title=track.title,
+            title=track.title or "",
             link=f"https://music.yandex.by/album/{album_id}/track/{track_id}",
-            duration=track.duration_ms // 1000,
+            duration=track.duration_ms // 1000 if track.duration_ms is not None else 0,
             uuid=uuid.uuid4(),
             download_task=download_task,
         )

@@ -33,6 +33,7 @@ from utils import SearchDomains, send_message
 logger = logging.getLogger(settings.app_name)
 
 SLEEP_TIME = 0.10
+ZERO_TIME = parser.parse("00:00:00")
 
 
 class PlayerStatus(Enum):
@@ -74,10 +75,7 @@ class MusicHandler:
             ctx=ctx,
             start_time=start_time,
         )
-        if tracks:
-            self._add_tracks_to_queue(tracks)
-
-    write_message: bool = (True,)
+        self._add_tracks_to_queue(tracks)
 
     async def play(
         self,
@@ -164,10 +162,9 @@ class MusicHandler:
     async def show_queue(self, ctx: Context):
         self._show_queue_first_index = self._get_current_track_position()
         embed = await self._get_show_queue_embed()
-        message: Message
         message = self._show_queue_message = await ctx.send(embed=embed)
 
-        if self._show_queue_first_index or len(self._queue) > self._show_queue_length:
+        if self._show_queue_first_index > -1 or len(self._queue) > self._show_queue_length:
             await message.add_reaction(settings.arrow_up_small)
             await message.add_reaction(settings.arrow_down_small)
             await message.add_reaction(settings.record_button)
@@ -184,7 +181,7 @@ class MusicHandler:
             current_time = current_time.strftime("%H:%M:%S")
             full_time = full_time.strftime("%H:%M:%S")
             current_track_strings = (
-                f"{track.title} [{'STREAM' if track.stram_link else f'{current_time} - {full_time}'}]"
+                f"{track.title} [{'STREAM' if track.stream_link else f'{current_time} - {full_time}'}]"
             )
             embed.add_field(name="Immediately track", value=f"```css\n{current_track_strings or 'empty'}```")
 
@@ -218,6 +215,7 @@ class MusicHandler:
     async def move_show_query(self, emoji: str) -> None:
         queue_length = self._show_queue_length
         old_index = self._show_queue_first_index
+
         if emoji == settings.arrow_down_small:
             if old_index + queue_length < len(self._queue):
                 self._show_queue_first_index += queue_length
@@ -236,7 +234,7 @@ class MusicHandler:
         else:
             self._show_queue_first_index = self._get_current_track_position()
 
-        if old_index != self._show_queue_first_index:
+        if old_index != self._show_queue_first_index and self._show_queue_message is not None:
             embed = await self._get_show_queue_embed()
             await self._show_queue_message.edit(embed=embed)
 
@@ -245,6 +243,7 @@ class MusicHandler:
             self._queue[index]
         except IndexError:
             await self._send_message(ctx, "Invalid index value", logging.ERROR)
+
             return
 
         current_id = self._get_current_track_position()
@@ -256,9 +255,8 @@ class MusicHandler:
             else:
                 self._current_queue_track = None
                 await self._set_chill_activity()
-            self._queue.pop(index)
-        else:
-            self._queue.pop(index)
+
+        self._queue.pop(index)
 
         await self._send_message(ctx, f"Track number - {index + 1} is removed!")
 
@@ -275,7 +273,7 @@ class MusicHandler:
             full_time = full_time.strftime("%H:%M:%S")
             await self._send_message(
                 ctx,
-                f"{track.title} [{'STREAM' if track.stram_link else f'{current_time} - {full_time}'}]\n{track.link}",
+                f"{track.title} [{'STREAM' if track.stream_link else f'{current_time} - {full_time}'}]\n{track.link}",
             )
         else:
             await self._send_message(ctx, "Nothing is playing")
@@ -293,8 +291,10 @@ class MusicHandler:
             current_time, _ = self._current_full_time()
             await asyncio.sleep(SLEEP_TIME)
             self._stop_current_track()
+
             if self._current_queue_track is not None:
                 self._current_queue_track.start_time = current_time
+
             self._current_im_track = track
             await self._try_play(ctx, track, is_im_track=True)
         elif self._status == PlayerStatus.NOT_PLAYING:
@@ -315,7 +315,7 @@ class MusicHandler:
         if volume_value is not None:
             config.volume_value = volume_value
 
-        if self._status == PlayerStatus.PLAYING:
+        if self._status == PlayerStatus.PLAYING and self._current_track is not None:
             current_time, _ = self._current_full_time()
             current_time += timedelta(seconds=SLEEP_TIME)
             self._stop_current_track()
@@ -348,13 +348,14 @@ class MusicHandler:
 
             track.im_start_time = track.start_time
             start_time = track.start_time.strftime("%H:%M:%S")
-            track.start_time = parser.parse("00:00:00")
+            track.start_time = ZERO_TIME
 
-            if track.stram_link:
+            if track.stream_link:
                 self._voice_client.play(
                     PCMVolumeTransformer(
                         FFmpegPCMAudio(
-                            source=track.stram_link, options=f"-af bass=g={config.bass_value} -loglevel debug",
+                            source=track.stream_link,
+                            options=f"-af bass=g={config.bass_value} -loglevel debug",
                         ),
                         volume=config.volume_value / 100,
                     ),
@@ -383,7 +384,7 @@ class MusicHandler:
                 await self._send_message(
                     ctx,
                     f"Now is playing - {track.title} ["
-                    f"{'STREAM' if track.stram_link else f'{start_time} - {timedelta(seconds=track.duration)}'}"
+                    f"{'STREAM' if track.stream_link else f'{start_time} - {timedelta(seconds=track.duration)}'}"
                     f"]\nLink - {track.link}",
                 )
             await self._voice_client.client.change_presence(
@@ -418,10 +419,16 @@ class MusicHandler:
 
     def _current_full_time(self) -> tuple[datetime, datetime]:
         track = self._current_track
-        a_timedelta = track.im_start_time - parser.parse("00:00:00")
+
+        if track is None:
+            return ZERO_TIME, ZERO_TIME
+
+        a_timedelta = track.im_start_time - ZERO_TIME
         seconds = a_timedelta.total_seconds()
-        current_time = timedelta(seconds=self._voice_client._player.loops * 0.02 + seconds) + parser.parse("00:00:00")
-        full_time = timedelta(seconds=track.duration) + parser.parse("00:00:00")
+        current_time = timedelta(
+            seconds=self._voice_client._player.loops if self._voice_client._player is not None else 0 * 0.02 + seconds,
+        ) + ZERO_TIME
+        full_time = timedelta(seconds=track.duration) + ZERO_TIME
 
         return current_time, full_time
 
@@ -438,6 +445,7 @@ class MusicHandler:
     ) -> list[Track]:
         parsed_url = parse.urlparse(source)
         netloc = parsed_url.netloc
+        tracks = []
 
         try:
             if netloc.startswith(SearchDomains.yandex_music):
@@ -465,11 +473,9 @@ class MusicHandler:
         except (CantDownloadException, CantLoadTrackInfoException) as e:
             await self._send_message(ctx, str(e), logging.ERROR)
 
-            return []
         except BatchDownloadNotAllowed:
             await self._send_message(ctx, "Can't play more then one track immediately")
 
-            return []
         except Exception as e:
             await self._send_message(ctx, "Looks like some bug happened, so, can't download music")
             logger.exception("Some error occurred", exc_info=e)
@@ -481,20 +487,22 @@ class MusicHandler:
 
             await self._send_message(ctx, f"Downloaded {len(tracks)} by source {source}")
 
-            return tracks
+        return tracks
 
     @property
-    def _current_track(self) -> Track:
+    def _current_track(self) -> Track | None:
         return self._current_im_track or self._current_queue_track
 
-    def _get_current_track_position(self) -> int | None:
-        if not self._current_queue_track and self._queue:
-            return 0
+    def _get_current_track_position(self) -> int:
+        if self._queue:
+            if self._current_queue_track is None:
+                return 0
 
-        for i in range(len(self._queue)):
-            if self._queue[i].uuid == self._current_queue_track.uuid:
-                return i
-        return None
+            for i in range(len(self._queue)):
+                if self._queue[i].uuid == self._current_queue_track.uuid:
+                    return i
+
+        return -1
 
     def _get_next_track(self, empty_im=True) -> Track | None:
         if self._current_im_track and empty_im and self._queue:
@@ -502,13 +510,17 @@ class MusicHandler:
 
             return self._current_queue_track
 
-        if (current_queue_track_position := self._get_current_track_position()) is not None:
+        if (current_queue_track_position := self._get_current_track_position()) != -1:
             next_queue_tack_position = current_queue_track_position + 1
+
             if next_queue_tack_position == len(self._queue) and self._is_loop_queue:
                 return self._queue[0]
+
             if next_queue_tack_position < len(self._queue):
                 return self._queue[next_queue_tack_position]
+
             return None
+
         return None
 
     def _get_prev_track(self, empty_im=True) -> Track | None:
