@@ -426,7 +426,7 @@ class MusicHandler:
         a_timedelta = track.im_start_time - ZERO_TIME
         seconds = a_timedelta.total_seconds()
         current_time = timedelta(
-            seconds=self._voice_client._player.loops if self._voice_client._player is not None else 0 * 0.02 + seconds,
+            seconds=(self._voice_client._player.loops if self._voice_client._player is not None else 0) * 0.02 + seconds,
         ) + ZERO_TIME
         full_time = timedelta(seconds=track.duration) + ZERO_TIME
 
