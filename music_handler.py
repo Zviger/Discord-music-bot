@@ -46,7 +46,7 @@ class MusicHandler:
     def __init__(self, voice_client, loop: AbstractEventLoop):
         self._voice_client: VoiceClient = voice_client
         self._loop: AbstractEventLoop = loop
-        self._queue: list = []
+        self._queue: list[Track] = []
         self._current_queue_track: Track | None = None
         self._current_im_track: Track | None = None
         self._status = PlayerStatus.NOT_PLAYING
@@ -194,13 +194,13 @@ class MusicHandler:
                     full_time = full_time.strftime("%H:%M:%S")
                     embed.add_field(
                         name=f"{i + 1}) Current track "
-                        f"[{'STREAM' if track.stram_link else f'{current_time} - {full_time}'}]",
+                        f"[{'STREAM' if track.stream_link else f'{current_time} - {full_time}'}]",
                         value=f"```css\n{track.title}```",
                         inline=False,
                     )
                 else:
                     embed.add_field(
-                        name=f"{i + 1}) {'STREAM' if track.stram_link else timedelta(seconds=track.duration)}",
+                        name=f"{i + 1}) {'STREAM' if track.stream_link else timedelta(seconds=track.duration)}",
                         value=f"```css\n{track.title}```",
                         inline=False,
                     )
