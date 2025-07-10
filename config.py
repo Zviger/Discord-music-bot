@@ -20,8 +20,8 @@ class Config:
 
         if self.config.has_section("music"):
             music_section = self.config["music"]
-            self.bass_value = music_section.getint("bass")
-            self.volume_value = music_section.getint("volume")
+            self.bass_value = music_section.getint("bass") or 0
+            self.volume_value = music_section.getint("volume") or 0
 
         if self.config.has_section("user_settings"):
             user_settings_section = self.config["user_settings"]
