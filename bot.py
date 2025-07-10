@@ -37,6 +37,7 @@ class MusicBot(Bot):
     def __init__(self, command_prefix, **options) -> None:
         super().__init__(command_prefix, **options)
         self.music_handler: MusicHandler | None = None
+        self.setup_commands()
 
     def get_guild_voice_client(self, ctx: Context) -> VoiceClient | None:
         author = ctx.author

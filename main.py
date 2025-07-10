@@ -16,4 +16,4 @@ if __name__ == "__main__":
     while settings.restart:
         settings.restart = False
         bot = MusicBot(settings.command_prefix, loop=asyncio.new_event_loop(), intents=discord.Intents.all())
-        bot.run(config.tokens.get("discord"))
+        bot.run(config.tokens.get("discord", ""))

@@ -77,7 +77,7 @@ class YouTubeDownloader(MusicDownloader):
                 if not batch_download_allowed:
                     raise BatchDownloadNotAllowed
 
-                entries = list(entries)
+                entries = list(entries)[:50]
                 tracks.extend(await self._batch_download(source_infos=entries, force_load_first=force_load_first))
             else:
                 tracks.append(await self._download(source_info))
