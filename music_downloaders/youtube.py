@@ -1,6 +1,9 @@
 import asyncio
 import logging
+import os
+import time
 import uuid
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
@@ -120,7 +123,7 @@ class YouTubeDownloader(MusicDownloader):
 
     async def _download(self, source_info: dict) -> Track:
         if not Path(f"{self._cache_dir}/{source_info['id']}").exists():
-            self._client.download(source_info["original_url"])
+            self.__download_from_client(source_info["original_url"])
 
         return Track(
             id=source_info["id"],
@@ -137,7 +140,8 @@ class YouTubeDownloader(MusicDownloader):
         if force_load_first:
             for source_info in source_infos[:2]:
                 url = source_info.get("webpage_url") or source_info["url"]
-                self._client.download(url)
+
+                self.__download_from_client(url)
                 tracks.append(
                     Track(
                         id=source_info["id"],
@@ -170,6 +174,22 @@ class YouTubeDownloader(MusicDownloader):
 
         return tracks
 
-    def __batch_sync_download(self, urls: list[dict]) -> None:
+    def __batch_sync_download(self, urls: Iterable[str]) -> None:
         for url in urls:
-            self._client.download(url)
+            self.__download_from_client(url)
+
+    def __download_from_client(self, url: str) -> None:
+        while True:
+            try:
+                self._client.download(url)
+            except youtube_dl.utils.DownloadError as e:
+                if "HTTP Error 416" in str(e):
+                    file_path = f"{self._cache_dir}/{url.split("=")[-1]}"
+
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                else:
+                    time.sleep(5)
+                    continue
+            else:
+                break

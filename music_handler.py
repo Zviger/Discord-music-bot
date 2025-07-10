@@ -192,18 +192,18 @@ class MusicHandler:
                     current_time, full_time = self._current_full_time()
                     current_time = current_time.strftime("%H:%M:%S")
                     full_time = full_time.strftime("%H:%M:%S")
-                    embed.add_field(
-                        name=f"{i + 1}) Current track "
-                        f"[{'STREAM' if track.stream_link else f'{current_time} - {full_time}'}]",
-                        value=f"```css\n{track.title}```",
-                        inline=False,
-                    )
+                    track_info = f"{i + 1}) Current track [{'STREAM' if track.stream_link else f'{current_time} - {full_time}'}]"
                 else:
-                    embed.add_field(
-                        name=f"{i + 1}) {'STREAM' if track.stream_link else timedelta(seconds=track.duration)}",
-                        value=f"```css\n{track.title}```",
-                        inline=False,
-                    )
+                    track_info = f"{i + 1}) {'STREAM' if track.stream_link else timedelta(seconds=track.duration)}"
+
+                if track.download_task and not track.download_task.done():
+                    track_info += " [NOT DOWNLOADED]"
+
+                embed.add_field(
+                    name=track_info,
+                    value=f"```css\n{track.title}```",
+                    inline=False,
+                )
 
         embed.colour = Colour.blue()
 
@@ -426,7 +426,7 @@ class MusicHandler:
         a_timedelta = track.im_start_time - ZERO_TIME
         seconds = a_timedelta.total_seconds()
         current_time = timedelta(
-            seconds=self._voice_client._player.loops if self._voice_client._player is not None else 0 * 0.02 + seconds,
+            seconds=(self._voice_client._player.loops if self._voice_client._player is not None else 0) * 0.02 + seconds,
         ) + ZERO_TIME
         full_time = timedelta(seconds=track.duration) + ZERO_TIME
 
