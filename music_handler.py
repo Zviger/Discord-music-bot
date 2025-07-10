@@ -192,18 +192,18 @@ class MusicHandler:
                     current_time, full_time = self._current_full_time()
                     current_time = current_time.strftime("%H:%M:%S")
                     full_time = full_time.strftime("%H:%M:%S")
-                    embed.add_field(
-                        name=f"{i + 1}) Current track "
-                        f"[{'STREAM' if track.stream_link else f'{current_time} - {full_time}'}]",
-                        value=f"```css\n{track.title}```",
-                        inline=False,
-                    )
+                    track_info = f"{i + 1}) Current track [{'STREAM' if track.stream_link else f'{current_time} - {full_time}'}]"
                 else:
-                    embed.add_field(
-                        name=f"{i + 1}) {'STREAM' if track.stream_link else timedelta(seconds=track.duration)}",
-                        value=f"```css\n{track.title}```",
-                        inline=False,
-                    )
+                    track_info = f"{i + 1}) {'STREAM' if track.stream_link else timedelta(seconds=track.duration)}"
+
+                if track.download_task and not track.download_task.done():
+                    track_info += " [NOT DOWNLOADED]"
+
+                embed.add_field(
+                    name=track_info,
+                    value=f"```css\n{track.title}```",
+                    inline=False,
+                )
 
         embed.colour = Colour.blue()
 
