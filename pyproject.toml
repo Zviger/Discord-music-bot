@@ -1,13 +1,8 @@
 [tool.poetry]
-name = "wire-be-main-service"
+name = "discord-music-bot"
 version = "0.1.0"
 description = ""
 authors = [""]
-readme = "README.md"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 cache-dir = ".tmp/ruff-cache"
@@ -37,9 +32,6 @@ ignore = [
     "UP038", # isinstance(x, (int, float)) to isinstance(x, int | float)
     "SIM108", # Ternanry operator
 ]
-
-[tool.ruff.lint.per-file-ignores]
-"apps/action/data/*" = ["E501"]
 
 fixable = ["ALL"]
 unfixable = []
