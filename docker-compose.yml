@@ -4,6 +4,8 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
+    command: >
+      sh -c "uv run python main.py"
     volumes:
       - ./cached_music:/app/cached_music
       - ./config.ini:/app/config.ini

@@ -1,7 +1,6 @@
 import base64
 import logging
 import time
-from typing import Any
 
 import aiohttp
 
@@ -15,7 +14,7 @@ class SpotifyError(Exception):
 
 
 class SpotifyMusicClient:
-    OAUTH_TOKEN_URL = "https://accounts.spotify.com/api/token"
+    OAUTH_TOKEN_URL = "https://accounts.spotify.com/api/token"  # noqa: S105
     API_BASE = "https://api.spotify.com/v1/"
 
     def __init__(self, client_id: str, client_secret: str) -> None:
@@ -40,10 +39,13 @@ class SpotifyMusicClient:
         return await self.make_request(url, headers={"Authorization": f"Bearer {token}"})
 
     @staticmethod
-    async def make_request(url: str, method: str = "GET", data: Any = None, headers: dict | None = None) -> dict:
+    async def make_request(
+        url: str, method: str = "GET", data: dict | None = None, headers: dict | None = None
+    ) -> dict:
         async with aiohttp.request(url=url, method=method, data=data, headers=headers) as r:
             if r.status != 200:
-                raise SpotifyError(f"Issue making POST request to {url}: [{r.status}] {r.json()}")
+                msg = f"Issue making POST request to {url}: [{r.status}] {r.json()}"
+                raise SpotifyError(msg)
 
             return await r.json()
 
@@ -58,10 +60,11 @@ class SpotifyMusicClient:
 
         token = await self.request_token()
         if token is None:
-            raise SpotifyError("Requested a token from Spotify, did not end up getting one")
+            msg = "Requested a token from Spotify, did not end up getting one"
+            raise SpotifyError(msg)
         token["expires_at"] = int(time.time()) + token["expires_in"]
         self.token = token
-        logger.debug(f"Created a new access token: {token}")
+        logger.debug("Created a new access token: %s", str(token))
         return self.token["access_token"]
 
     @staticmethod
@@ -73,4 +76,3 @@ class SpotifyMusicClient:
         payload = {"grant_type": "client_credentials"}
         headers = self._make_token_auth(self.client_id, self.client_secret)
         return await self.make_request(self.OAUTH_TOKEN_URL, method="POST", data=payload, headers=headers)
-

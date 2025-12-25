@@ -1,6 +1,6 @@
 from urllib import parse
 
-from exceptions import CantLoadTrackInfoException
+from exceptions import CantLoadTrackInfoError
 from music_clients.spotify import SpotifyMusicClient
 
 
@@ -36,4 +36,5 @@ class SpotifyInfoLoader:
 
             return [f"{i['track']['name']} {i['track']['artists'][0]['name']}" for i in tracks]
 
-        raise CantLoadTrackInfoException("Can't load track's spotify info")
+        msg = "Can't load track's spotify info"
+        raise CantLoadTrackInfoError(msg)

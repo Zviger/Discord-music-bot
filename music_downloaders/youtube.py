@@ -1,16 +1,16 @@
 import asyncio
 import logging
-import os
 import time
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import yt_dlp as youtube_dl
 
-from exceptions import BatchDownloadNotAllowed, CantDownloadException
+from exceptions import BatchDownloadNotAllowedError, CantDownloadError
 from models import Track
 from music_downloaders.base import MusicDownloader
 from utils import chunks
@@ -19,25 +19,25 @@ logger = logging.getLogger(__name__)
 
 
 class Executor:
-    def __init__(self, loop: asyncio.AbstractEventLoop, thread_count: int = 1):
+    def __init__(self, loop: asyncio.AbstractEventLoop, thread_count: int = 1) -> None:
         self._ex = ThreadPoolExecutor(max_workers=thread_count)
         self._loop = loop
 
-    def __call__(self, f, *args, **kwargs):
+    def __call__(self, f: Callable, *args: Any, **kwargs: Any) -> asyncio.Future:  # noqa: ANN401
         return self._loop.run_in_executor(self._ex, partial(f, *args, **kwargs))
 
 
 class YtLogger:
     @staticmethod
-    def debug(msg) -> None:
+    def debug(msg: str) -> None:
         logger.debug(msg)
 
     @staticmethod
-    def warning(msg) -> None:
+    def warning(msg: str) -> None:
         logger.warning(msg)
 
     @staticmethod
-    def error(msg) -> None:
+    def error(msg: str) -> None:
         logger.error(msg)
 
 
@@ -47,7 +47,6 @@ class YouTubeDownloader(MusicDownloader):
             params={
                 "format": "bestaudio/best",
                 "outtmpl": f"{cache_dir}/%(id)s",
-                # "ignoreerrors": True,
                 "skip-unavailable-fragments": True,
                 "youtube-skip-dash-manifest": True,
                 "cache-dir": "~/.cache/youtube-dl",
@@ -64,6 +63,7 @@ class YouTubeDownloader(MusicDownloader):
     async def download(
         self,
         source: str,
+        *,
         batch_download_allowed: bool = True,
         force_load_first: bool = False,
     ) -> list[Track]:
@@ -78,7 +78,7 @@ class YouTubeDownloader(MusicDownloader):
         ):
             if entries := source_info.get("entries"):
                 if not batch_download_allowed:
-                    raise BatchDownloadNotAllowed
+                    raise BatchDownloadNotAllowedError
 
                 entries = list(entries)[:50]
                 tracks.extend(await self._batch_download(source_infos=entries, force_load_first=force_load_first))
@@ -103,13 +103,15 @@ class YouTubeDownloader(MusicDownloader):
                     tracks.append(await self._download(source_info["entries"][0]))
 
         if not tracks:
-            raise CantDownloadException("Can't download music by this source")
+            msg = "Can't download music by this source"
+            raise CantDownloadError(msg)
 
         return tracks
 
     async def batch_download_by_track_names(
         self,
         track_names: list[str],
+        *,
         force_load_first: bool = False,
     ) -> list[Track]:
         source_infos = []
@@ -133,7 +135,7 @@ class YouTubeDownloader(MusicDownloader):
             uuid=uuid.uuid4(),
         )
 
-    async def _batch_download(self, source_infos: list[dict], force_load_first: bool) -> list[Track]:
+    async def _batch_download(self, source_infos: list[dict], *, force_load_first: bool) -> list[Track]:
         tracks = []
         executor = Executor(thread_count=self._download_thread_count, loop=asyncio.get_event_loop())
 
@@ -157,7 +159,7 @@ class YouTubeDownloader(MusicDownloader):
         for chunk in chunks(source_infos, len(source_infos) // self._download_thread_count + 1):
             download_task = executor(
                 self.__batch_sync_download,
-                urls=map(lambda i: i.get("webpage_url") or i["url"], chunk),
+                urls=(i.get("webpage_url") or i["url"] for i in chunk),
             )
             for source_info in chunk:
                 url = source_info.get("webpage_url") or source_info["url"]
@@ -184,10 +186,10 @@ class YouTubeDownloader(MusicDownloader):
                 self._client.download(url)
             except youtube_dl.utils.DownloadError as e:
                 if "HTTP Error 416" in str(e):
-                    file_path = f"{self._cache_dir}/{url.split("=")[-1]}"
+                    file_path = Path(self._cache_dir) / url.split("=")[-1]
 
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
+                    if Path.exists(file_path):
+                        Path.unlink(file_path)
                 else:
                     time.sleep(5)
                     continue

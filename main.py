@@ -1,4 +1,3 @@
-import asyncio
 import logging
 
 import discord
@@ -15,5 +14,5 @@ if __name__ == "__main__":
     settings.restart = True
     while settings.restart:
         settings.restart = False
-        bot = MusicBot(settings.command_prefix, loop=asyncio.new_event_loop(), intents=discord.Intents.all())
+        bot = MusicBot(settings.command_prefix, intents=discord.Intents.all())
         bot.run(config.tokens.get("discord", ""))

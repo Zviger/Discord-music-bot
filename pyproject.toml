@@ -1,8 +1,25 @@
-[tool.poetry]
+[project]
 name = "discord-music-bot"
 version = "0.1.0"
-description = ""
-authors = [""]
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "discord>=2.3.2",
+    "psutil>=7.2.0",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.12.0",
+    "pynacl>=1.6.1",
+    "python-dateutil>=2.9.0.post0",
+    "yandex-music>=2.2.0",
+    "yt-dlp>=2025.12.8",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "ruff>=0.14.10",
+]
 
 [tool.ruff]
 cache-dir = ".tmp/ruff-cache"
@@ -10,31 +27,22 @@ line-length = 120
 target-version = "py313"
 
 [tool.ruff.lint]
-select = [
-    "F", # Pyflakes
-    "E", "W", # Pycodestyle
-    "I", # Issort
-    "Q", # flake8-quotes
-    "COM", # flake8-commas
-    "N", # pep8-naming N818
-    "UP", # pyupgrade
-    "PIE", # flake8-pie
-    "T20", # flake8-print
-    "ISC", # flake8-implicit-str-concat
-    "RET", # flake8-return
-    "SIM", # flake8-simplify
-    "B", # flake8-bugbear
-    "DTZ", # flake8-datetimez
-    "PT", # flake8-pytest-style
-]
+extend-select = ["ALL"]
 ignore = [
-    "N818", # exception name
-    "UP038", # isinstance(x, (int, float)) to isinstance(x, int | float)
-    "SIM108", # Ternanry operator
+    "PLR2004",
+    "D",
+    "RUF012",
+    "DJ008",
+    "COM812",
+    "EXE002",
+    "TRY301",
+    "RUF001",
 ]
-
 fixable = ["ALL"]
 unfixable = []
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = "double"
+
+[tool.mypy]
+disable_error_code = ["import-untyped", "import-not-found"]

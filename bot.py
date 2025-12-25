@@ -10,6 +10,7 @@ from discord import (
     ActivityType,
     File,
     Guild,
+    Intents,
     Member,
     Message,
     Reaction,
@@ -34,8 +35,8 @@ logger = logging.getLogger(settings.app_name)
 
 
 class MusicBot(Bot):
-    def __init__(self, command_prefix, **options) -> None:
-        super().__init__(command_prefix, **options)
+    def __init__(self, command_prefix: str, intents: Intents) -> None:
+        super().__init__(command_prefix, intents=intents)
         self.music_handler: MusicHandler | None = None
         self.setup_commands()
 
@@ -62,7 +63,7 @@ class MusicBot(Bot):
         )
 
     async def on_ready(self) -> None:
-        logger.info(f"We have logged in as {self.user}")
+        logger.info("We have logged in as %s", str(self.user))
 
         await self.change_presence(status=Status.online, activity=Activity(name="кочалке", type=ActivityType.competing))
 
@@ -124,7 +125,7 @@ class MusicBot(Bot):
             if user_setting := config.users_settings.get(member.id):
                 if channel_id := config.channels.get("general"):
                     channel = self.get_channel(channel_id)
-                    logger.info(f"Send grating message to {member}")
+                    logger.info("Send grating message to %s", str(member))
 
                     if isinstance(channel, TextChannel):
                         await channel.send(
@@ -133,7 +134,7 @@ class MusicBot(Bot):
                             delete_after=10,
                         )
             else:
-                logger.info(f"Member {member} is here.")
+                logger.info("Member %s is here.", str(member))
 
     async def on_member_ban(self, _: Guild, user: User) -> None:
         if channel_id := config.channels.get("general"):
@@ -142,14 +143,14 @@ class MusicBot(Bot):
             if isinstance(channel, TextChannel):
                 await channel.send(content=f"{user.name}, бан, чучело", tts=True, file=File("images/ban.jpg"))
 
-    def setup_commands(self) -> None:
-        async def prepare_and_play(args: tuple[str, ...], ctx: Context, play_method: Callable):
+    def setup_commands(self) -> None:  # noqa: C901, PLR0915
+        async def prepare_and_play(args: tuple[str, ...], ctx: Context, play_method: Callable) -> None:
             source, start_time = parse_play_args(args)
             voice_client = self.get_guild_voice_client(ctx)
 
             if not voice_client or not voice_client.is_connected():
                 try:
-                    await wait_for(summon(ctx, False), 10)
+                    await wait_for(summon(ctx, move=False), 10)
                 except TimeoutError:
                     await send_message(ctx, "Bot summon timeout error.", logging.ERROR)
 
@@ -179,9 +180,9 @@ class MusicBot(Bot):
                 await send_message(ctx, f"Hello, {ctx.author}! {emoji}")
 
         @self.command(aliases=("сюда",))
-        async def summon(ctx: Context, move=True) -> None:
+        async def summon(ctx: Context, *, move: bool = True) -> None:
             """Summon bot in current voice channel."""
-            logger.info(f"{ctx.author} started summoning")
+            logger.info("%s started summoning", ctx.author)
             author = ctx.author
 
             if not isinstance(author, Member) or author.voice is None or author.voice.channel is None:
@@ -207,7 +208,7 @@ class MusicBot(Bot):
         @self.command(aliases=("сьеби", "съеби", "уходи", "l"))
         async def leave(ctx: Context) -> None:
             """Try to drop the bot from guild voice channels."""
-            logger.info(f"{ctx.author} started leaving.")
+            logger.info("%s started leaving.", str(ctx.author))
 
             if self.music_handler:
                 await self.music_handler.set_not_playing_status()
@@ -315,7 +316,7 @@ class MusicBot(Bot):
                 await send_message(ctx, "Can't show queue: bot is not in voice channel!", logging.WARNING)
 
         @self.command(aliases=("j", "никита"))
-        async def jump(ctx: Context, *args: str):
+        async def jump(ctx: Context, *args: str) -> None:
             """Jump on specific track in queue by index."""
             if self.is_voice_client_here(ctx) and self.music_handler is not None:
                 try:
@@ -368,7 +369,7 @@ class MusicBot(Bot):
             await prepare_and_play(args, ctx, MusicHandler.im_play)
 
         @self.command(aliases=("бас",))
-        async def bass(ctx: Context, *args) -> None:
+        async def bass(ctx: Context, *args: str) -> None:
             """Set bass value."""
             if args:
                 if self.is_voice_client_here(ctx) and self.music_handler is not None:
@@ -420,8 +421,8 @@ class MusicBot(Bot):
 
             try:
                 await leave(ctx)
-            except Exception as e:
-                logger.error(str(e))
+            except Exception:
+                logger.exception("Restart error")
 
             await self.close()
 

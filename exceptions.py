@@ -1,10 +1,10 @@
-class CantDownloadException(Exception):
+class CantDownloadError(Exception):
     pass
 
 
-class CantLoadTrackInfoException(Exception):
+class CantLoadTrackInfoError(Exception):
     pass
 
 
-class BatchDownloadNotAllowed(Exception):
+class BatchDownloadNotAllowedError(Exception):
     pass

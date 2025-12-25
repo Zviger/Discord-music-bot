@@ -1,4 +1,5 @@
 import configparser
+from pathlib import Path
 
 from models import UserSettings
 from settings import settings
@@ -6,11 +7,11 @@ from settings import settings
 
 class Config:
     def __init__(self) -> None:
-        self.users_settings = {}
-        self.channels = {}
-        self.bass_value = 0
-        self.volume_value = 50
-        self.tokens = {}
+        self.users_settings: dict = {}
+        self.channels: dict = {}
+        self.bass_value: int = 0
+        self.volume_value: int = 50
+        self.tokens: dict = {}
 
         self.config = configparser.ConfigParser()
         self.load_config()
@@ -43,7 +44,7 @@ class Config:
         self.config["music"]["bass"] = str(self.bass_value)
         self.config["music"]["volume"] = str(self.volume_value)
 
-        with open(settings.config_file, "w", encoding="utf-8") as config_file:
+        with Path.open(Path(settings.config_file), "w", encoding="utf-8") as config_file:
             self.config.write(config_file)
 
 

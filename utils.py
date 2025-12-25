@@ -1,10 +1,10 @@
 import logging
-from datetime import datetime
+from collections.abc import Generator
+from datetime import timedelta
 from enum import Enum
-from typing import Tuple, Optional, Generator
 
 from dateutil import parser
-from discord import Embed, Colour
+from discord import Colour, Embed
 from discord.ext.commands import Context
 
 from settings import settings
@@ -19,7 +19,7 @@ class SearchDomains(str, Enum):
     spotify = "open.spotify.com"
 
 
-async def send_message(ctx: Context, message: str, level: int = logging.INFO):
+async def send_message(ctx: Context, message: str, level: int = logging.INFO) -> None:
     embed = Embed(title=message if len(message) <= 256 else f"{message[:253]}...")
     if level == logging.INFO:
         logger.info(message)
@@ -33,12 +33,13 @@ async def send_message(ctx: Context, message: str, level: int = logging.INFO):
     await ctx.send(embed=embed)
 
 
-def parse_play_args(args: Tuple[str, ...]) -> Tuple[str, Optional[datetime]]:
-    start_time = None
+def parse_play_args(args: tuple[str, ...]) -> tuple[str, timedelta]:
+    start_time = timedelta()
     strings = list(args)
     if len(args) > 1:
         try:
-            start_time = parser.parse(strings[-1])
+            parsed_time = parser.parse(strings[-1])
+            start_time = timedelta(seconds=parsed_time.second, hours=parsed_time.hour, minutes=parsed_time.minute)
             strings.pop()
         except ValueError:
             pass
@@ -47,7 +48,7 @@ def parse_play_args(args: Tuple[str, ...]) -> Tuple[str, Optional[datetime]]:
     return source, start_time
 
 
-def chunks(lst, n) -> Generator:
+def chunks(lst: list, n: int) -> Generator:
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
-        yield lst[i: i + n]
+        yield lst[i : i + n]
