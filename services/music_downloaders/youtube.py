@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Generator, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from pathlib import Path
@@ -10,10 +10,9 @@ from typing import Any
 
 import yt_dlp as youtube_dl
 
-from exceptions import BatchDownloadNotAllowedError, CantDownloadError
-from models import Track
-from music_downloaders.base import MusicDownloader
-from utils import chunks
+from core.exceptions import CantDownloadError
+from core.models import Track
+from services.music_downloaders.base import MusicDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ class YtLogger:
 
 
 class YouTubeDownloader(MusicDownloader):
-    def __init__(self, cache_dir: str) -> None:
+    def __init__(self, cache_dir: Path) -> None:
         self._client = youtube_dl.YoutubeDL(
             params={
                 "format": "bestaudio/best",
@@ -64,7 +63,7 @@ class YouTubeDownloader(MusicDownloader):
         self,
         source: str,
         *,
-        batch_download_allowed: bool = True,
+        only_one: bool = True,
         force_load_first: bool = False,
     ) -> list[Track]:
         tracks = []
@@ -77,10 +76,11 @@ class YouTubeDownloader(MusicDownloader):
             and source_info.get("live_status") != "is_live"
         ):
             if entries := source_info.get("entries"):
-                if not batch_download_allowed:
-                    raise BatchDownloadNotAllowedError
+                entries = list(entries)[:10]
 
-                entries = list(entries)[:50]
+                if only_one:
+                    entries = [entries[0]]
+
                 tracks.extend(await self._batch_download(source_infos=entries, force_load_first=force_load_first))
             else:
                 tracks.append(await self._download(source_info))
@@ -124,7 +124,7 @@ class YouTubeDownloader(MusicDownloader):
         return await self._batch_download(source_infos=source_infos, force_load_first=force_load_first)
 
     async def _download(self, source_info: dict) -> Track:
-        if not Path(f"{self._cache_dir}/{source_info['id']}").exists():
+        if not (self._cache_dir / source_info["id"]).exists():
             self.__download_from_client(source_info["original_url"])
 
         return Track(
@@ -156,7 +156,7 @@ class YouTubeDownloader(MusicDownloader):
 
             source_infos = source_infos[2:]
 
-        for chunk in chunks(source_infos, len(source_infos) // self._download_thread_count + 1):
+        for chunk in self._chunks(source_infos, len(source_infos) // self._download_thread_count + 1):
             download_task = executor(
                 self.__batch_sync_download,
                 urls=(i.get("webpage_url") or i["url"] for i in chunk),
@@ -176,6 +176,10 @@ class YouTubeDownloader(MusicDownloader):
 
         return tracks
 
+    def _chunks(self, lst: list, n: int) -> Generator:
+        for i in range(0, len(lst), n):
+            yield lst[i : i + n]
+
     def __batch_sync_download(self, urls: Iterable[str]) -> None:
         for url in urls:
             self.__download_from_client(url)
@@ -186,7 +190,7 @@ class YouTubeDownloader(MusicDownloader):
                 self._client.download(url)
             except youtube_dl.utils.DownloadError as e:
                 if "HTTP Error 416" in str(e):
-                    file_path = Path(self._cache_dir) / url.split("=")[-1]
+                    file_path = self._cache_dir / url.split("=")[-1]
 
                     if Path.exists(file_path):
                         Path.unlink(file_path)

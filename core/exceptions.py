@@ -4,7 +4,3 @@ class CantDownloadError(Exception):
 
 class CantLoadTrackInfoError(Exception):
     pass
-
-
-class BatchDownloadNotAllowedError(Exception):
-    pass

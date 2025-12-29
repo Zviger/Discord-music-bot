@@ -4,9 +4,7 @@ import time
 
 import aiohttp
 
-from settings import settings
-
-logger = logging.getLogger(settings.app_name)
+logger = logging.getLogger()
 
 
 class SpotifyError(Exception):

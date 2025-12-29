@@ -1,7 +1,7 @@
 from urllib import parse
 
-from exceptions import CantLoadTrackInfoError
-from music_clients.spotify import SpotifyMusicClient
+from core.exceptions import CantLoadTrackInfoError
+from services.music_clients.spotify import SpotifyMusicClient
 
 
 class SpotifyInfoLoader:
