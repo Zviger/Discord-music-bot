@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from models import Track
+from core.models import Track
 
 
 class MusicDownloader(ABC):
@@ -8,7 +8,8 @@ class MusicDownloader(ABC):
     async def download(
         self,
         source: str,
-        butch_download_allowed: bool = True,
+        *,
+        only_one: bool = True,
         force_load_first: bool = False,
     ) -> list[Track]:
         pass

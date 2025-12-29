@@ -7,13 +7,13 @@ from urllib import parse
 import yandex_music
 from yandex_music.utils.request_async import Request
 
-from exceptions import BatchDownloadNotAllowed, CantDownloadException
-from models import Track
-from music_downloaders.base import MusicDownloader
+from core.exceptions import CantDownloadError
+from core.models import Track
+from services.music_downloaders.base import MusicDownloader
 
 
 class YandexMusicDownloader(MusicDownloader):
-    def __init__(self, token: str, cache_dir: str) -> None:
+    def __init__(self, token: str, cache_dir: Path) -> None:
         self._request = Request(timeout=1000)
         self._client = yandex_music.ClientAsync(token=token, request=self._request)
         self._request.set_and_return_client(self._client)
@@ -22,7 +22,8 @@ class YandexMusicDownloader(MusicDownloader):
     async def download(
         self,
         source: str,
-        batch_download_allowed: bool = True,
+        *,
+        only_one: bool = True,
         force_load_first: bool = False,
     ) -> list[Track]:
         parsed_url = parse.urlparse(source)
@@ -52,13 +53,13 @@ class YandexMusicDownloader(MusicDownloader):
         ):
             ym_tracks = await self._client.tracks(f"{path_args[3]}:{path_args[1]}")
         else:
-            raise CantDownloadException("Cant download yandex music")
+            msg = "Cant download yandex music"
+            raise CantDownloadError(msg)
 
-        if len(ym_tracks) > 1 and not batch_download_allowed:
-            raise BatchDownloadNotAllowed
+        if len(ym_tracks) > 1 and only_one:
+            ym_tracks = [ym_tracks[0]]
 
         for i, ym_track in enumerate(ym_tracks):
-            ym_track: yandex_music.Track
             if not ym_track.available:
                 continue
 
@@ -67,10 +68,10 @@ class YandexMusicDownloader(MusicDownloader):
 
         return tracks
 
-    async def _download(self, track: yandex_music.Track, force_load: bool) -> Track:
+    async def _download(self, track: yandex_music.Track, *, force_load: bool) -> Track:
         download_task = None
 
-        if not (filepath := Path(self._cache_dir).joinpath(track.track_id)).exists():
+        if not (filepath := self._cache_dir.joinpath(track.track_id)).exists():
             download_task = asyncio.create_task(track.downloadAsync(str(filepath)))
             if force_load:
                 await download_task
