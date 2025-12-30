@@ -98,9 +98,17 @@ class SystemCog(commands.Cog):
             await message.channel.send(
                 content="Все сюдаааааааааааааа!",
                 tts=True,
-                file=File("images/vse_suda.jpg"),
+                file=File(Path("images").joinpath(self._settings.images["vse_suda"])),
                 delete_after=1006,
             )
+
+        for text, auto_reply in self._settings.auto_replies.items():
+            if text.lower().strip() in message.content.lower().strip():
+                await message.channel.send(
+                    content=auto_reply.text,
+                    file=File(Path("images").joinpath(auto_reply.image_name)),
+                )
+                break
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:

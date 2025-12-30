@@ -3,7 +3,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings
 
-from core.models import UserSettings
+from core.models import AutoReply, UserSettings
 
 root_path = Path().parent
 
@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     restart: bool = False
     users_settings: dict[int, UserSettings] = {}
     channels: dict[str, int] = {}
+    images: dict[str, Path] = {}
+    auto_replies: dict[str, AutoReply] = {}
     bass_value: int = 0
     volume_value: int = 50
     tokens: dict = {}
@@ -26,7 +28,7 @@ class Settings(BaseSettings):
         self._config = configparser.ConfigParser()
         self.load_config()
 
-    def load_config(self) -> None:
+    def load_config(self) -> None:  # noqa: C901
         self._config.read(self.config_file, encoding="utf-8")
 
         if self._config.has_section("music"):
@@ -39,6 +41,11 @@ class Settings(BaseSettings):
             for uid, setting in user_settings_section.items():
                 self.users_settings[int(uid)] = UserSettings(*setting.strip().split("::"))
 
+        if self._config.has_section("auto_replies"):
+            auto_replies_section = self._config["auto_replies"]
+            for text, setting in auto_replies_section.items():
+                self.auto_replies[text.strip().lower()] = AutoReply(*setting.strip().split("::"))
+
         if self._config.has_section("channels"):
             channels_section = self._config["channels"]
             for channel_name, channel_id in channels_section.items():
@@ -48,6 +55,11 @@ class Settings(BaseSettings):
             tokens_section = self._config["tokens"]
             for token_name, token in tokens_section.items():
                 self.tokens[token_name] = token
+
+        if self._config.has_section("images"):
+            images_section = self._config["images"]
+            for image_name, image_path in images_section.items():
+                self.images[image_name] = Path(image_path)
 
     def dump_config(self) -> None:
         self._config["music"] = {}
