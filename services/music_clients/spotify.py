@@ -1,10 +1,9 @@
 import base64
-import logging
 import time
 
 import aiohttp
 
-logger = logging.getLogger()
+from core.logging import logger
 
 
 class SpotifyError(Exception):
@@ -60,6 +59,7 @@ class SpotifyMusicClient:
         if token is None:
             msg = "Requested a token from Spotify, did not end up getting one"
             raise SpotifyError(msg)
+
         token["expires_at"] = int(time.time()) + token["expires_in"]
         self.token = token
         logger.debug("Created a new access token: %s", str(token))

@@ -36,6 +36,7 @@ class MessageService:
         elif level == logging.ERROR:
             logger.error(message)
             embed.colour = Colour.red()
+
         await ctx.send(embed=embed)
 
     async def send_show_queue(self, ctx: Context, tracks: list[TrackInfo], queue_length: int) -> None:

@@ -204,36 +204,46 @@ class MusicCog(commands.Cog):
     @commands.command(aliases=("j", "никита"))
     async def jump(self, ctx: commands.Context, *args: str) -> None:
         """Jump on specific track in queue by index."""
-        if self._is_voice_client_here(ctx) and self._music_service is not None:
-            try:
-                index = int(args[0])
-                if index > 0:
-                    index -= 1
-            except ValueError:
-                await self._message_service.send(ctx, "Invalid index!", logging.ERROR)
-                return
+        if not args:
+            await self._message_service.send(ctx, "Please provide an index!", logging.ERROR)
+            return
 
-            await self._music_service.jump(ctx, index)
-        else:
+        try:
+            index = int(args[0])
+            if index > 0:
+                index -= 1
+        except (ValueError, IndexError):
+            await self._message_service.send(ctx, "Invalid index!", logging.ERROR)
+            return
+
+        if not self._is_voice_client_here(ctx) or self._music_service is None:
             await self._message_service.send(ctx, "Can't jump: bot is not in voice channel with you!", logging.WARNING)
+            return
+
+        await self._music_service.jump(ctx, index)
 
     @commands.command(aliases=("r", "удалить"))
     async def remove(self, ctx: commands.Context, *args: str) -> None:
         """Remove on specific track in queue by index."""
-        if self._is_voice_client_here(ctx) and self._music_service is not None:
-            try:
-                index = int(args[0])
-                if index > 0:
-                    index -= 1
-            except ValueError:
-                await self._message_service.send(ctx, "Invalid index!", logging.ERROR)
-                return
+        if not args:
+            await self._message_service.send(ctx, "Please provide an index!", logging.ERROR)
+            return
 
-            await self._music_service.remove(ctx, index)
-        else:
+        try:
+            index = int(args[0])
+            if index > 0:
+                index -= 1
+        except (ValueError, IndexError):
+            await self._message_service.send(ctx, "Invalid index!", logging.ERROR)
+            return
+
+        if not self._is_voice_client_here(ctx) or self._music_service is None:
             await self._message_service.send(
                 ctx, "Can't remove: bot is not in voice channel with you!", logging.WARNING
             )
+            return
+
+        await self._music_service.remove(ctx, index)  # type: ignore[union-attr]
 
     @commands.command(aliases=("замешать",))
     async def shuffle(self, ctx: commands.Context) -> None:
@@ -309,9 +319,8 @@ class MusicCog(commands.Cog):
         if not voice_client or not voice_client.is_connected():
             try:
                 await wait_for(self.summon(ctx, move=False), 10)
-            except TimeoutError:
+            except Exception:  # noqa: BLE001
                 await self._message_service.send(ctx, "Bot summon timeout error.", logging.ERROR)
-
                 return
 
         voice_client = self._get_guild_voice_client(ctx)

@@ -10,6 +10,7 @@ class QueueManager:
         self._last_used_index: int = -1
         self._interrupting_track: Track | None = None
         self._is_looped: bool = False
+        self._before_interruption_index: int = -1
 
     def add_many(self, tracks: list[Track]) -> None:
         self._queue.extend(tracks)
@@ -22,6 +23,7 @@ class QueueManager:
         self._current_index = -1
         self._last_used_index = -1
         self._interrupting_track = None
+        self._before_interruption_index = -1
 
     def get_next(self) -> Track | None:
         next_index = self._get_next_index()

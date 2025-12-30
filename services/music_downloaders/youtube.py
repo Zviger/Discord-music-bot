@@ -1,5 +1,5 @@
 import asyncio
-import logging
+import itertools
 import time
 import uuid
 from collections.abc import Callable, Generator, Iterable
@@ -11,10 +11,9 @@ from typing import Any
 import yt_dlp as youtube_dl
 
 from core.exceptions import CantDownloadError
+from core.logging import logger
 from core.models import Track
 from services.music_downloaders.base import MusicDownloader
-
-logger = logging.getLogger(__name__)
 
 
 class Executor:
@@ -76,7 +75,7 @@ class YouTubeDownloader(MusicDownloader):
             and source_info.get("live_status") != "is_live"
         ):
             if entries := source_info.get("entries"):
-                entries = list(entries)[:10]
+                entries = list(itertools.islice(entries, 50))
 
                 if only_one:
                     entries = [entries[0]]
