@@ -1,7 +1,6 @@
 from asyncio import Future
 from dataclasses import dataclass
 from datetime import timedelta
-from enum import Enum
 from uuid import UUID
 
 
@@ -9,13 +8,6 @@ from uuid import UUID
 class UserSettings:
     gratings_text: str = ""
     gratings_image_name: str = ""
-
-
-class SearchDomains(str, Enum):
-    youtube = "www.youtube.com"
-    youtube_short = "youtu.be"
-    yandex_music = "music.yandex"
-    spotify = "open.spotify.com"
 
 
 @dataclass
@@ -29,6 +21,7 @@ class Track:
     im_start_time: timedelta = timedelta()
     stream_link: str | None = None
     download_task: Future | None = None
+    file_extension: str | None = None
 
 
 @dataclass

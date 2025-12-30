@@ -50,11 +50,13 @@ class YtLogger:
 
 
 class YouTubeDownloader(MusicDownloader):
+    FILE_EXTENSION = ".opus"
+
     def __init__(self, cache_dir: Path) -> None:
         self._client = youtube_dl.YoutubeDL(
             params={
                 "format": "bestaudio/best",
-                "outtmpl": f"{cache_dir}/%(id)s",
+                "outtmpl": f"{cache_dir}/%(id)s.%(ext)s",
                 "skip-unavailable-fragments": True,
                 "youtube-skip-dash-manifest": True,
                 "cache-dir": "~/.cache/youtube-dl",
@@ -63,6 +65,13 @@ class YouTubeDownloader(MusicDownloader):
                 "quiet": True,
                 "no_warnings": True,
                 "nopart": True,
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "opus",
+                        "preferredquality": "192",
+                    },
+                ],
             },
         )
         self._download_thread_count = 8
@@ -133,7 +142,8 @@ class YouTubeDownloader(MusicDownloader):
         return await self._batch_download(source_infos=source_infos, force_load_first=force_load_first)
 
     async def _download(self, source_info: dict) -> Track:
-        if not (self._cache_dir / source_info["id"]).exists():
+        file_path = self._cache_dir / f"{source_info['id']}{self.FILE_EXTENSION}"
+        if not file_path.exists():
             self.__download_from_client(source_info["original_url"])
 
         return Track(
@@ -142,6 +152,7 @@ class YouTubeDownloader(MusicDownloader):
             link=source_info["original_url"].strip(),
             duration=source_info["duration"],
             uuid=uuid.uuid4(),
+            file_extension=self.FILE_EXTENSION,
         )
 
     async def _batch_download(self, source_infos: list[dict], *, force_load_first: bool) -> list[Track]:
@@ -160,6 +171,7 @@ class YouTubeDownloader(MusicDownloader):
                         link=url.strip(),
                         duration=source_info["duration"],
                         uuid=uuid.uuid4(),
+                        file_extension=self.FILE_EXTENSION,
                     ),
                 )
 
@@ -180,6 +192,7 @@ class YouTubeDownloader(MusicDownloader):
                         duration=source_info["duration"],
                         uuid=uuid.uuid4(),
                         download_task=download_task,
+                        file_extension=self.FILE_EXTENSION,
                     ),
                 )
 
@@ -199,10 +212,10 @@ class YouTubeDownloader(MusicDownloader):
                 self._client.download(url)
             except youtube_dl.utils.DownloadError as e:
                 if "HTTP Error 416" in str(e):
-                    file_path = self._cache_dir / url.split("=")[-1]
-
-                    if Path.exists(file_path):
-                        Path.unlink(file_path)
+                    file_id = url.split("=")[-1]
+                    file_path = self._cache_dir / f"{file_id}{self.FILE_EXTENSION}"
+                    if file_path.exists():
+                        file_path.unlink()
                 else:
                     time.sleep(5)
                     continue

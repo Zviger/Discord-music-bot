@@ -13,6 +13,8 @@ from services.music_downloaders.base import MusicDownloader
 
 
 class YandexMusicDownloader(MusicDownloader):
+    FILE_EXTENSION = ".mp3"
+
     def __init__(self, token: str, cache_dir: Path) -> None:
         self._request = Request(timeout=1000)
         self._client = yandex_music.ClientAsync(token=token, request=self._request)
@@ -70,8 +72,9 @@ class YandexMusicDownloader(MusicDownloader):
 
     async def _download(self, track: yandex_music.Track, *, force_load: bool) -> Track:
         download_task = None
+        filepath = self._cache_dir.joinpath(f"{track.track_id}{self.FILE_EXTENSION}")
 
-        if not (filepath := self._cache_dir.joinpath(track.track_id)).exists():
+        if not filepath.exists():
             download_task = asyncio.create_task(track.download_async(str(filepath)))
             if force_load:
                 await download_task
@@ -85,4 +88,5 @@ class YandexMusicDownloader(MusicDownloader):
             duration=track.duration_ms // 1000 if track.duration_ms is not None else 0,
             uuid=uuid.uuid4(),
             download_task=download_task,
+            file_extension=self.FILE_EXTENSION,
         )

@@ -10,7 +10,7 @@ class SpotifyError(Exception):
     pass
 
 
-class SpotifyMusicClient:
+class SpotifyApiClient:
     OAUTH_TOKEN_URL = "https://accounts.spotify.com/api/token"  # noqa: S105
     API_BASE = "https://api.spotify.com/v1/"
 

@@ -47,7 +47,8 @@ class Player:
             if track.stream_link:
                 audio_kwargs["source"] = track.stream_link
             else:
-                audio_kwargs["source"] = str(Path(self._settings.cached_music_dir).joinpath(track.id))
+                cached_file = Path(self._settings.cached_music_dir) / f"{track.id}{track.file_extension}"
+                audio_kwargs["source"] = str(cached_file)
                 audio_kwargs["before_options"] = f"-ss {start_time}"
 
             self._voice_client.play(

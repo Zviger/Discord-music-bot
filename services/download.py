@@ -1,9 +1,16 @@
+from enum import StrEnum
 from urllib import parse
 
-from core.models import SearchDomains, Track
+from core.models import Track
 from services.music_downloaders.yandex import YandexMusicDownloader
 from services.music_downloaders.youtube import YouTubeDownloader
 from services.music_info_loaders.spotify import SpotifyInfoLoader
+
+
+class SearchDomains(StrEnum):
+    youtube = "www.youtube.com"
+    yandex_music = "music.yandex"
+    spotify = "open.spotify.com"
 
 
 class DownloadService:
