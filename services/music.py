@@ -92,13 +92,13 @@ class MusicService:
 
         if self._player.is_in_any_status(PlayerStatus.PLAYING, PlayerStatus.NOT_PLAYING):
             if self._player.is_in_any_status(PlayerStatus.PLAYING):
-                self._player.stop()
-                await asyncio.sleep(SLEEP_TIME)
-
                 current_track = self._queue_manager.get_current()
                 if current_track is not None:
                     current_time, _ = self._player.get_played_and_full_time(current_track)
                     current_track.start_time = current_time
+
+                self._player.stop()
+                await asyncio.sleep(SLEEP_TIME)
 
             self._queue_manager.add_interruption(track)
             await self._player.try_play(
