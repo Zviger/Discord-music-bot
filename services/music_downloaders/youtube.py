@@ -26,13 +26,23 @@ class Executor:
 
 
 class YtLogger:
+    _IGNORED_WARNINGS = [
+        "SABR streaming",
+        "web client https formats have been skipped",
+        "missing a url",
+        "No supported JavaScript runtime could be found.",
+    ]
+
     @staticmethod
     def debug(msg: str) -> None:
         logger.debug(msg)
 
     @staticmethod
     def warning(msg: str) -> None:
-        logger.warning(msg)
+        if any(ignored in msg for ignored in YtLogger._IGNORED_WARNINGS):
+            logger.debug("yt-dlp: %s", msg)
+        else:
+            logger.warning(msg)
 
     @staticmethod
     def error(msg: str) -> None:
