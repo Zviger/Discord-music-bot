@@ -40,6 +40,13 @@ class MessageService:
         await ctx.send(embed=embed)
 
     async def send_show_queue(self, ctx: Context, tracks: list[TrackInfo], queue_length: int) -> None:
+        self._show_queue_first_index = 0
+
+        for track in tracks:
+            if track.is_current:
+                self._show_queue_first_index = track.queue_index
+                break
+
         embed = await self._get_show_queue_embed(tracks, queue_length)
         message = self._show_queue_message = await ctx.send(embed=embed)
 
