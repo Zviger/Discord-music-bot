@@ -86,7 +86,10 @@ class YouTubeDownloader(MusicDownloader):
     ) -> list[Track]:
         tracks = []
 
-        source_info = self._client.extract_info(source, download=False, process=False)
+        try:
+            source_info = self._client.extract_info(source, download=False, process=False)
+        except youtube_dl.utils.DownloadError as e:
+            raise CantDownloadError from e
 
         if (
             source_info is not None
