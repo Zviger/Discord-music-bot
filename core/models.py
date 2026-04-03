@@ -9,10 +9,12 @@ class UserSettings:
     gratings_text: str = ""
     gratings_image_name: str = ""
 
+
 @dataclass
 class AutoReply:
     text: str
     image_name: str
+
 
 @dataclass
 class Track:

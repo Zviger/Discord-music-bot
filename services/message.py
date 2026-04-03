@@ -32,9 +32,9 @@ class MessageService:
             embed.colour = Colour.blue()
         elif level == logging.WARNING:
             logger.warning(message)
-            embed.colour = Colour.from_rgb(255, 255, 0)
+            embed.colour = Colour.orange()
         elif level == logging.ERROR:
-            logger.error(message)
+            logger.exception(message)
             embed.colour = Colour.red()
 
         await ctx.send(embed=embed)

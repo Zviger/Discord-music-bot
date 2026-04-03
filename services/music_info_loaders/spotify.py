@@ -11,6 +11,7 @@ class SpotifyInfoLoader:
     async def get_track_names(self, source: str) -> list[str]:
         parsed_url = parse.urlparse(source)
         path_args = parsed_url.path.split("/")
+        error_message = "Can't load track's spotify info"
 
         try:
             if "track" in path_args:
@@ -37,7 +38,6 @@ class SpotifyInfoLoader:
 
                 return [f"{i['track']['name']} {i['track']['artists'][0]['name']}" for i in tracks]
         except SpotifyError as e:
-            raise CantLoadTrackInfoError from e
+            raise CantLoadTrackInfoError(error_message) from e
 
-        msg = "Can't load track's spotify info"
-        raise CantLoadTrackInfoError(msg)
+        raise CantLoadTrackInfoError(error_message)
