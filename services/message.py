@@ -26,15 +26,16 @@ class MessageService:
         self._show_queue_length = 8
 
     async def send(self, ctx: Context, message: str, level: int = logging.INFO) -> None:
-        embed = Embed(title=message if len(message) <= 256 else f"{message[:253]}...")
+        text = message.strip() or "Something went wrong"
+        embed = Embed(title=text if len(text) <= 256 else f"{text[:253]}...")
         if level == logging.INFO:
-            logger.info(message)
+            logger.info(text)
             embed.colour = Colour.blue()
         elif level == logging.WARNING:
-            logger.warning(message)
+            logger.warning(text)
             embed.colour = Colour.orange()
         elif level == logging.ERROR:
-            logger.exception(message)
+            logger.exception(text)
             embed.colour = Colour.red()
 
         await ctx.send(embed=embed)
